@@ -8,10 +8,10 @@ namespace Simsoft\HttpClient\Traits;
 trait Sandbox
 {
     /** @var string|null Production endpoint */
-    protected ?string $endpoint = null;
+    protected ?string $endpoint;
 
     /** @var string|null Sandbox endpoint. */
-    protected ?string $sandboxEndpoint = null;
+    protected ?string $sandboxEndpoint;
 
     /** @var bool Determine is sandbox mode. */
     protected bool $sandboxMode = false;
