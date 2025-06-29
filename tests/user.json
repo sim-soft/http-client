@@ -1,0 +1,174 @@
+{
+"data": [
+  {
+    "id": 1,
+    "name": "Alice Tan",
+    "email": "alice.tan@example.com",
+    "profile": {
+      "age": 28,
+      "address": [{
+        "street": "123 Jalan Mawar",
+        "city": "Kuala Lumpur",
+        "postcode": "50000"
+      }],
+      "contact": {
+        "phone": "+60123456789",
+        "preferred": "email"
+      }
+    }
+  },
+  {
+    "id": 2,
+    "name": "Benjamin Lee",
+    "email": "ben.lee@example.com",
+    "profile": {
+      "age": 32,
+      "address": [{
+        "street": "45A Lorong Kenanga",
+        "city": "Petaling Jaya",
+        "postcode": "46000"
+      }],
+      "contact": {
+        "phone": "+60111222333",
+        "preferred": "phone"
+      }
+    }
+  },
+  {
+    "id": 3,
+    "name": "Clara Ong",
+    "email": "clara.ong@example.com",
+    "profile": {
+      "age": 24,
+      "address": [{
+        "street": "89 Jalan Melur",
+        "city": "Shah Alam",
+        "postcode": "40100"
+      }],
+      "contact": {
+        "phone": "+60166778899",
+        "preferred": "email"
+      }
+    }
+  },
+  {
+    "id": 4,
+    "name": "Daniel Wong",
+    "email": "dan.wong@example.com",
+    "profile": {
+      "age": 35,
+      "address": [{
+        "street": "77 Jalan Merdeka",
+        "city": "Subang Jaya",
+        "postcode": "47500"
+      }],
+      "contact": {
+        "phone": "+60199887766",
+        "preferred": "phone"
+      }
+    }
+  },
+  {
+    "id": 5,
+    "name": "Elaine Lim",
+    "email": "elaine.lim@example.com",
+    "profile": {
+      "age": 30,
+      "address": [{
+        "street": "10 Persiaran Bunga Raya",
+        "city": "Seremban",
+        "postcode": "70000"
+      }],
+      "contact": {
+        "phone": "+60123456780",
+        "preferred": "email"
+      }
+    }
+  },
+  {
+    "id": 6,
+    "name": "Faridah Hassan",
+    "email": "faridah.hassan@example.com",
+    "profile": {
+      "age": 27,
+      "address": [{
+        "street": "12 Jalan Cempaka",
+        "city": "Kuantan",
+        "postcode": "25000"
+      }],
+      "contact": {
+        "phone": "+60135556677",
+        "preferred": "email"
+      }
+    }
+  },
+  {
+    "id": 7,
+    "name": "Ganesh Kumar",
+    "email": "ganesh.kumar@example.com",
+    "profile": {
+      "age": 41,
+      "address": [{
+        "street": "51 Taman Rimba",
+        "city": "Ipoh",
+        "postcode": "31400"
+      }],
+      "contact": {
+        "phone": "+60128889900",
+        "preferred": "phone"
+      }
+    }
+  },
+  {
+    "id": 8,
+    "name": "Hui Min Goh",
+    "email": "hui.goh@example.com",
+    "profile": {
+      "age": 29,
+      "address": [{
+        "street": "66A Jalan Delima",
+        "city": "Johor Bahru",
+        "postcode": "80000"
+      }],
+      "contact": {
+        "phone": "+60177665544",
+        "preferred": "email"
+      }
+    }
+  },
+  {
+    "id": 9,
+    "name": "Irfan Mahmud",
+    "email": "irfan.mahmud@example.com",
+    "profile": {
+      "age": 26,
+      "address": [{
+        "street": "9 Jalan Putra",
+        "city": "Alor Setar",
+        "postcode": "05100"
+      }],
+      "contact": {
+        "phone": "+60121212121",
+        "preferred": "phone"
+      }
+    }
+  },
+  {
+    "id": 10,
+    "name": "Joanna Chong",
+    "email": "joanna.chong@example.com",
+    "profile": {
+      "age": 33,
+      "address": [{
+        "street": "102 Jalan Bukit",
+        "city": "Melaka",
+        "postcode": "75200"
+      }],
+      "contact": {
+        "phone": "+60133445566",
+        "preferred": "email"
+      }
+    }
+  }
+]
+}

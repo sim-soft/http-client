@@ -3,7 +3,6 @@
 namespace Simsoft\HttpClient;
 
 use InvalidArgumentException;
-use Psr\Http\Message\ResponseInterface;
 
 /**
  * Request class.
@@ -45,6 +44,19 @@ class HttpClient
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HEADER => true,
     ];
+
+    /**
+     * Reset configuration.
+     *
+     * @return void
+     */
+    public function reset(): void
+    {
+        $this->method = 'GET';
+        $this->queryParams = [];
+        $this->body = null;
+        $this->contentType = 'application/json';
+    }
 
     /**
      * Set request endpoint.
@@ -207,10 +219,15 @@ class HttpClient
     /**
      * Perform POST request.
      *
+     * @param array $formData
      * @return Response
      */
-    public function post(): Response
+    public function post(array $formData = []): Response
     {
+        if ($formData) {
+            $this->formData($formData);
+        }
+
         return $this->withMethod('POST')->request();
     }
 
@@ -222,6 +239,16 @@ class HttpClient
     public function patch(): Response
     {
         return $this->withMethod('PATCH')->request();
+    }
+
+    /**
+     * Perform PUT request.
+     *
+     * @return Response
+     */
+    public function put(): Response
+    {
+        return $this->withMethod('PUT')->request();
     }
 
     /**
@@ -287,24 +314,23 @@ class HttpClient
             }
 
             curl_setopt_array($curl, $this->options);
-
             $response = curl_exec($curl);
             $curlInfo = curl_getinfo($curl);
             $curlError = curl_error($curl);
-
             curl_close($curl);
-            if ($response === false) {
-                $attempts--;
-                continue;
-            }
+            $this->reset();
 
             /** @var Response $response */
             $response = new $this->responseClass($curlInfo, $response, $curlError);
-            return $response;
+
+            $attempts--;
+
+            if ($response->ok()) {
+                return $response;
+            }
+
         } while ($attempts > 0);
 
-        /** @var Response $response */
-        $response = new $this->responseClass($curlInfo, false, $curlError);
         return $response;
     }
 }
