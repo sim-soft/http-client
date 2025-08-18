@@ -104,7 +104,9 @@ class HttpClient
      */
     public function withOptions(array $options): self
     {
-        $this->options = array_merge($this->options, $options);
+        foreach ($options as $option => $value) {
+            $this->options[$option] = $value;
+        }
         return $this;
     }
 
