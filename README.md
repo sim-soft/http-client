@@ -12,6 +12,7 @@ This is a simple CURL HTTP client implementation. For advance HTTP client, sugge
 8. [Advance Usage](docs/ADVANCE.md)
    1. [Create Custom API Client](docs/ADVANCE.md)
    1. [Create Custom Response](docs/ADVANCE.md)
+9. [Macro](docs/MACRO.md)
 
 ## Install<a id="installation"></a>
 
@@ -82,6 +83,20 @@ $response = $client->graphQL('{
    }
 }')->post(); // Perform GraphQL post.
 ```
+
+## Send Requests with Retry
+
+```php
+use Simsoft\HttpClient\HttpClient;
+
+$client = new HttpClient();
+$client->withBaseUri('https://domain.com/api/endpoint');
+
+$response = $client->retry(3)->get(); // Retry 3 times. No wait in between attempts.
+
+$response = $client->retry(3, 2)->get(); // Retry 3 times, wait 2 milliseconds before the next attempt.
+```
+
 ## Set Headers<a id="set_headers"></a>
 ```php
 use Simsoft\HttpClient\HttpClient;
@@ -151,8 +166,6 @@ if ($response->ok()) {
     echo $response->getAttribute('errors.status') . PHP_EOL;
     echo $response->getAttribute('errors.title') . PHP_EOL;
 }
-
 ```
-
 ## License
 The Simsoft HttpClient is licensed under the MIT License. See the [LICENSE](LICENSE) file for details
