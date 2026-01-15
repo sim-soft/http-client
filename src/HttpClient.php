@@ -205,6 +205,10 @@ class HttpClient
      */
     public function retry(int $times, ?int $after = null): static
     {
+        if ($times < 1) {
+            throw new InvalidArgumentException('The number of retry should be more than 1.');
+        }
+
         $this->retry = $times;
         if (is_int($after) && $after < 0) {
             throw new Exception('Retry after milliseconds should be more than 0');

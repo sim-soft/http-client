@@ -82,6 +82,20 @@ $response = $client->graphQL('{
    }
 }')->post(); // Perform GraphQL post.
 ```
+
+## Send Requests with Retry
+
+```php
+use Simsoft\HttpClient\HttpClient;
+
+$client = new HttpClient();
+$client->withBaseUri('https://domain.com/api/endpoint');
+
+$response = $client->retry(3)->get(); // Retry 3 times. No wait in between attempts.
+
+$response = $client->retry(3, 2)->get(); // Retry 3 times, wait 2 milliseconds before the next attempt.
+```
+
 ## Set Headers<a id="set_headers"></a>
 ```php
 use Simsoft\HttpClient\HttpClient;
