@@ -129,7 +129,7 @@ class HttpClient
     /**
      * Prepare query params.
      *
-     * @param string[]|int[] $params
+     * @param array<string, mixed> $params
      * @return $this
      */
     public function query(array $params): self
@@ -141,7 +141,7 @@ class HttpClient
     /**
      * Prepare form-data request params.
      *
-     * @param string[]|int[] $data
+     * @param array<string, mixed> $data
      * @return $this
      */
     public function formData(array $data): self
@@ -154,7 +154,7 @@ class HttpClient
     /**
      * Prepare x-www-form-urlencoded request params.
      *
-     * @param string[]|int[] $data
+     * @param array<string, mixed> $data
      * @return $this
      */
     public function urlEncoded(array $data): self
@@ -182,7 +182,7 @@ class HttpClient
      * Prepare GraphQL request params.
      *
      * @param string $query
-     * @param string[]|int[] $variables
+     * @param array<string, mixed> $variables
      * @return $this
      */
     public function graphQL(string $query, array $variables = []): self
@@ -228,7 +228,7 @@ class HttpClient
             return;
         }
 
-        $microseconds = (float)$this->retryAfter * 1000;
+        $microseconds = $this->retryAfter * 1000;
         if ($microseconds < 1000000) {
             usleep($microseconds);
         } elseif ($seconds = (int)($microseconds / 1000000)) {
@@ -239,7 +239,7 @@ class HttpClient
     /**
      * Perform GET request.
      *
-     * @param string[]|int[] $params
+     * @param array<string, mixed> $params
      * @return Response
      */
     public function get(array $params = []): Response
@@ -254,7 +254,7 @@ class HttpClient
     /**
      * Perform POST request.
      *
-     * @param array $formData
+     * @param array<string, mixed> $formData
      * @return Response
      */
     public function post(array $formData = []): Response
