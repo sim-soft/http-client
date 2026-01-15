@@ -2,6 +2,7 @@
 
 namespace Simsoft\HttpClient;
 
+use Exception;
 use InvalidArgumentException;
 
 /**
@@ -32,6 +33,9 @@ class HttpClient
 
     /** @var int Total retry if request failed. */
     protected int $retry = 0;
+
+    /** @var int|null Retry after milliseconds. */
+    protected ?int $retryAfter = null;
 
     /** @var string Default content type. */
     protected string $contentType = 'application/json';
@@ -195,12 +199,37 @@ class HttpClient
      * Set retry. Default: 0.
      *
      * @param int $times
+     * @param int|null $after Retry after number of milliseconds.
      * @return $this
+     * @throws Exception
      */
-    public function retry(int $times): static
+    public function retry(int $times, ?int $after = null): static
     {
         $this->retry = $times;
+        if (is_int($after) && $after < 0) {
+            throw new Exception('Retry after milliseconds should be more than 0');
+        }
+        $this->retryAfter = $after;
         return $this;
+    }
+
+    /**
+     * Perform wait before the next attempt.
+     *
+     * @return void
+     */
+    protected function wait(): void
+    {
+        if ($this->retryAfter === null) {
+            return;
+        }
+
+        $microseconds = (float)$this->retryAfter * 1000;
+        if ($microseconds < 1000000) {
+            usleep($microseconds);
+        } elseif ($seconds = (int)($microseconds / 1000000)) {
+            sleep($seconds);
+        }
     }
 
     /**
@@ -330,6 +359,8 @@ class HttpClient
             if ($response->ok()) {
                 return $response;
             }
+
+            $attempts && $this->wait();
 
         } while ($attempts > 0);
 
