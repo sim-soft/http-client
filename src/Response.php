@@ -56,6 +56,46 @@ class Response implements ResponseInterface
     }
 
     /**
+     * Determine the status code is ok.
+     *
+     * @return bool
+     */
+    public function successful(): bool
+    {
+        return $this->ok();
+    }
+
+    /**
+     * Determine if the status code is >= 400.
+     *
+     * @return bool
+     */
+    public function failed(): bool
+    {
+        return $this->statusCode >= 400;
+    }
+
+    /**
+     * Determine is client error.
+     *
+     * @return bool
+     */
+    public function clientError(): bool
+    {
+        return $this->statusCode == 400;
+    }
+
+    /**
+     * Determine is server error.
+     *
+     * @return bool
+     */
+    public function serverError(): bool
+    {
+        return $this->statusCode == 500;
+    }
+
+    /**
      * Determine the response has error.
      *
      * @return bool
