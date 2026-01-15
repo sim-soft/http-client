@@ -4,12 +4,15 @@ namespace Simsoft\HttpClient;
 
 use Exception;
 use InvalidArgumentException;
+use Simsoft\HttpClient\Traits\Macroable;
 
 /**
  * Request class.
  */
 class HttpClient
 {
+    use Macroable;
+
     /** @var string Target endpoint. */
     protected string $baseUri;
 
@@ -19,7 +22,7 @@ class HttpClient
     /** @var string[] Headers. */
     protected array $headers = [];
 
-    /** @var string[]|int[] Query params. */
+    /** @var array<string, mixed> Query params. */
     protected array $queryParams = [];
 
     /** @var mixed Request body. */
@@ -40,7 +43,7 @@ class HttpClient
     /** @var string Default content type. */
     protected string $contentType = 'application/json';
 
-    /** @var string  */
+    /** @var string The response class to be used. */
     protected string $responseClass = Response::class;
 
     /** @var array<int, mixed>  */

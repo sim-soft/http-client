@@ -12,6 +12,7 @@ This is a simple CURL HTTP client implementation. For advance HTTP client, sugge
 8. [Advance Usage](docs/ADVANCE.md)
    1. [Create Custom API Client](docs/ADVANCE.md)
    1. [Create Custom Response](docs/ADVANCE.md)
+9. [Macro](docs/MACRO.md)
 
 ## Install<a id="installation"></a>
 
@@ -165,8 +166,6 @@ if ($response->ok()) {
     echo $response->getAttribute('errors.status') . PHP_EOL;
     echo $response->getAttribute('errors.title') . PHP_EOL;
 }
-
 ```
-
 ## License
 The Simsoft HttpClient is licensed under the MIT License. See the [LICENSE](LICENSE) file for details
