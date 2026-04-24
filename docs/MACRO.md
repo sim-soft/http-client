@@ -10,23 +10,20 @@ require_once 'vendor/autoload.php';
 
 use Simsoft\HttpClient\HttpClient;
 
-// Add bearerAuth method to HttpClient
-HttpClient::macro('bearerAuth', function(string $token) {
+// Add withToken method to HttpClient
+HttpClient::macro('withToken', function(string $token) {
     return $this->withHeaders([
         'Authorization' => "Bearer $token",
     ]);
 });
 
-// Add connectionTimeout method to HttpClient.
-HttpClient::macro('connectionTimeout', function (int $timeout) {
-    $this->options[CURLOPT_CONNECTTIMEOUT] = $timeout;
-    return $this;
+// Add the connectionTimeout method to HttpClient.
+HttpClient::macro('connectionTimeoutMS', function (int $timeout) {
+    return $this->withOptions([CURLOPT_CONNECTTIMEOUT_MS => $timeout]);
 });
 
-$client = new HttpClient();
-$response = $client
-    ->withBaseUri('https://domain.com/api/endpoint');
-    ->bearerAuth('YOUR_SECRET_TOKEN')  // Using macro method bearerAuth()
-    ->connectionTimeout(5); // Using macro method connectionTimeout 5 seconds
-    ->formData(['foo' => 'bar'])->post();
+$response = HttpClient::make()
+    ->withToken('SECRET_TOKEN')  // Using macro method withToken()
+    ->connectionTimeoutMS(2000) // 2000 milliseconds = 2 seconds connection timeout.
+    ->post('https://domain.com/api/endpoint', ['foo' => 'bar']);
 ```

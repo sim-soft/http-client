@@ -7,6 +7,7 @@ use Closure;
 use ReflectionClass;
 use ReflectionException;
 use ReflectionMethod;
+use ReflectionNamedType;
 
 /**
  * Macroable trait.
@@ -32,7 +33,7 @@ trait Macroable
      * Add macro closure by mixin.
      *
      * @param object $mixin Mixin object.
-     * @param bool $replace Whether to replace existing macro method. Default: true.
+     * @param bool $replace Whether to replace the existing macro method. Default: true.
      * @return void
      * @throws ReflectionException
      */
@@ -42,9 +43,14 @@ trait Macroable
             ReflectionMethod::IS_PUBLIC | ReflectionMethod::IS_PROTECTED
         ) as $method) {
             if ($replace || !array_key_exists($method->getName(), static::$macros)) {
+
+                $returnType = $method->getReturnType();
+                $isClosure = $returnType instanceof ReflectionNamedType
+                    && $returnType->getName() === 'Closure';
+
                 static::macro(
                     $method->getName(),
-                    $method->getReturnType()?->getName() === 'Closure' // @phpstan-ignore method.notFound
+                    $isClosure
                         ? $method->invoke($mixin)
                         : [$mixin, $method->getName()]
                 );
@@ -63,14 +69,15 @@ trait Macroable
     {
         if (array_key_exists($name, static::$macros)) {
             $macro = static::$macros[$name];
-            if ($macro instanceof Closure) {
-                return call_user_func_array(
-                    Closure::bind($macro, $this, get_called_class()), // @phpstan-ignore argument.type
-                    $arguments
-                );
+            if (!$macro instanceof Closure) {
+                $macro = Closure::fromCallable($macro);
             }
 
-            return call_user_func_array($macro, $arguments); // @phpstan-ignore argument.type
+            return call_user_func_array(
+                Closure::bind($macro, $this, get_called_class()),
+                $arguments
+            );
+
         }
 
         throw new BadMethodCallException("Method $name does not exist.");
