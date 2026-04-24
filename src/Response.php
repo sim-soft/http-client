@@ -5,54 +5,110 @@ namespace Simsoft\HttpClient;
 use Psr\Http\Message\MessageInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamInterface;
+use RuntimeException;
+use Simsoft\HttpClient\Streams\FileStream;
+use Simsoft\HttpClient\Streams\StringStream;
 
 /**
  * Response class.
  */
 class Response implements ResponseInterface
 {
+    /** @var string Default protocol version. */
+    protected string $protocolVersion = '1.1';
+
     /** @var int Status code. */
-    protected int $statusCode;
+    protected int $statusCode = 0;
 
-    /** @var string|bool Raw response body. */
-    protected string|bool $body;
-
-    /** @var array<string, mixed>|null Headers */
-    protected ?array $headers = null;
+    /** @var array<string, mixed> Headers */
+    protected array $headers = [];
 
     /** @var array<string|int, mixed>|null JSON content. */
     protected ?array $attributes = null;
 
-    /** @var string Message. */
-    protected string $message;
+    /** @var StreamInterface|null Stream */
+    protected ?StreamInterface $stream = null;
 
-    /** @var array<string, mixed>|false CURL info */
-    protected array|false $curlInfo;
+    /** @var bool|null Determine if the content is JSON. */
+    protected ?bool $isJson = null;
 
     /**
      * Constructor.
      *
-     * @param array<string, mixed>|false $curlInfo
-     * @param string|bool $body
-     * @param string $message
+     * @param array<string, mixed>|false $curlInfo CURL info.
+     * @param string $body Raw response body.
+     * @param string $message Response message.
+     * @param string|null $sinkPath Download the destination path.
+     * @param int $errno Error code.
+     * @param string $rawHeaders Raw headers.
      */
-    public function __construct(array|false $curlInfo, string|bool $body, string $message = '')
+    final public function __construct(
+        protected array|false $curlInfo = false,
+        protected string      $body = '',
+        protected string      $message = '',
+        protected ?string     $sinkPath = null,
+        protected int         $errno = 0,
+        protected string      $rawHeaders = '',
+    )
     {
-        $this->curlInfo = $curlInfo;
-        $this->body = $body;
-        if (isset($curlInfo['http_code'])) {
-            $this->withStatus($curlInfo['http_code'], $message);
-        }
+        $this->statusCode = $curlInfo['http_code'] ?? 0;
+        $this->setHeaders($rawHeaders);
     }
 
     /**
-     * Determine the response is ok.
+     * Set headers.
      *
-     * @return bool
+     * @param string $rawHeaders
+     * @return void
      */
-    public function ok(): bool
+    protected function setHeaders(string $rawHeaders): void
     {
-        return $this->statusCode >= 200 && $this->statusCode < 300;
+        $this->headers = [];
+
+        // Split into blocks by blank lines, take only the last (final response)
+        $blocks = preg_split('/\r?\n\r?\n/', trim($rawHeaders));
+        $lastBlock = $blocks === false ? '' : (end($blocks) ?: '');
+        if ($lastBlock === '') {
+            return;
+        }
+
+        $lines = explode("\n", str_replace("\r", "", $lastBlock));
+        foreach ($lines as $index => $line) {
+            if (trim($line) === '') continue;
+
+            // The first line contains the protocol, status code, and message
+            if ($index === 0 && str_starts_with($line, 'HTTP/')) {
+                $parts = explode(' ', $line, 3);
+
+                // Sync the Protocol Version
+                if (isset($parts[0])) {
+                    $this->protocolVersion = str_replace('HTTP/', '', $parts[0]);
+                }
+
+                // FIX: Sync the Reason Phrase (Message) if not already set or if it's a cURL error
+                if (isset($parts[2]) && ($this->message === '' || $this->statusCode > 0)) {
+                    $this->message = trim($parts[2]);
+                }
+                continue;
+            }
+
+            // Standard header parsing logic...
+            if (str_contains($line, ':')) {
+                [$key, $value] = explode(':', $line, 2);
+                $this->headers[trim($key)][] = trim($value);
+            }
+        }
+        $this->headers = array_change_key_case($this->headers);
+    }
+
+    /**
+     * Get headers.
+     *
+     * @return array<string, mixed>
+     */
+    public function getHeaders(): array
+    {
+        return $this->headers;
     }
 
     /**
@@ -62,7 +118,7 @@ class Response implements ResponseInterface
      */
     public function successful(): bool
     {
-        return $this->ok();
+        return $this->statusCode >= 200 && $this->statusCode < 300;
     }
 
     /**
@@ -72,7 +128,7 @@ class Response implements ResponseInterface
      */
     public function failed(): bool
     {
-        return $this->statusCode >= 400;
+        return $this->statusCode >= 400 || $this->isNetworkError();
     }
 
     /**
@@ -80,9 +136,9 @@ class Response implements ResponseInterface
      *
      * @return bool
      */
-    public function clientError(): bool
+    public function isClientError(): bool
     {
-        return $this->statusCode == 400;
+        return $this->getStatusCode() >= 400 && $this->getStatusCode() < 500;
     }
 
     /**
@@ -90,23 +146,278 @@ class Response implements ResponseInterface
      *
      * @return bool
      */
-    public function serverError(): bool
+    public function isServerError(): bool
     {
-        return $this->statusCode == 500;
+        return $this->getStatusCode() >= 500;
     }
 
     /**
-     * Determine the response has error.
+     * Determine is network error.
+     *
+     * @return bool
+     */
+    public function isNetworkError(): bool
+    {
+        return $this->errno !== 0;
+    }
+
+    /**
+     * Determine is retryable network error.
+     *
+     * @return bool
+     */
+    public function isRetryableNetworkError(): bool
+    {
+        return in_array($this->errno, [
+            CURLE_OPERATION_TIMEOUTED,
+            CURLE_COULDNT_CONNECT,
+            CURLE_COULDNT_RESOLVE_HOST,
+            CURLE_RECV_ERROR,
+            CURLE_SEND_ERROR,
+            CURLE_PARTIAL_FILE,
+            CURLE_GOT_NOTHING,
+            CURLE_SSL_CONNECT_ERROR,
+        ]);
+    }
+
+    /**
+     * Determine the response has an error.
      *
      * @return bool
      */
     public function hasError(): bool
     {
-        return !$this->ok();
+        return $this->failed();
     }
 
     /**
-     * Get response message.
+     * Determine the response is a redirect.
+     * @return bool
+     */
+    public function isRedirect(): bool
+    {
+        return $this->getStatusCode() >= 300 && $this->getStatusCode() < 400;
+    }
+
+    /**
+     * Determine the response is ok.
+     *
+     * @return bool
+     */
+    public function ok(): bool
+    {
+        return $this->getStatusCode() === 200;
+    }
+
+    /**
+     * 201 Created
+     * @return bool
+     */
+    public function created(): bool
+    {
+        return $this->getStatusCode() === 201;
+    }
+
+    /**
+     * 202 Accepted
+     * @return bool
+     */
+    public function accepted(): bool
+    {
+        return $this->getStatusCode() === 202;
+    }
+
+    /**
+     * 203 Non-Authoritative Information
+     * @return bool
+     */
+    public function nonAuthoritativeInformation(): bool
+    {
+        return $this->getStatusCode() === 203;
+    }
+
+    /**
+     * 204 No Content
+     * @return bool
+     */
+    public function noContent(): bool
+    {
+        return $this->getStatusCode() === 204;
+    }
+
+    /**
+     * 205 Reset Content
+     * @return bool
+     */
+    public function resetContent(): bool
+    {
+        return $this->getStatusCode() === 205;
+    }
+
+    /**
+     * 301 Moved Permanently
+     * @return bool
+     */
+    public function movedPermanently(): bool
+    {
+        return $this->getStatusCode() === 301;
+    }
+
+    /**
+     * 302 Found
+     * @return bool
+     */
+    public function found(): bool
+    {
+        return $this->getStatusCode() === 302;
+    }
+
+    /**
+     * 304 Not modified
+     * @return bool
+     */
+    public function notModified(): bool
+    {
+        return $this->getStatusCode() === 304;
+    }
+
+    /**
+     * 400 Bad Request
+     * @return bool
+     */
+    public function badRequest(): bool
+    {
+        return $this->getStatusCode() === 400;
+    }
+
+    /**
+     * 401 Unauthorized
+     * @return bool
+     */
+    public function unauthorized(): bool
+    {
+        return $this->getStatusCode() === 401;
+    }
+
+    /**
+     * 402 Payment Required
+     * @return bool
+     */
+    public function paymentRequired(): bool
+    {
+        return $this->getStatusCode() === 402;
+    }
+
+    /**
+     * 403 Forbidden
+     * @return bool
+     */
+    public function forbidden(): bool
+    {
+        return $this->getStatusCode() === 403;
+    }
+
+    /**
+     * 404 Not Found
+     * @return bool
+     */
+    public function notFound(): bool
+    {
+        return $this->getStatusCode() === 404;
+    }
+
+    /**
+     * 405 Method Not Allowed
+     * @return bool
+     */
+    public function methodNotAllowed(): bool
+    {
+        return $this->getStatusCode() === 405;
+    }
+
+    /**
+     * 406 Not Acceptable
+     * @return bool
+     */
+    public function notAcceptable(): bool
+    {
+        return $this->getStatusCode() === 406;
+    }
+
+    /**
+     * 407 Proxy Authentication Required
+     * @return bool
+     */
+    public function proxyAuthenticationRequired(): bool
+    {
+        return $this->getStatusCode() === 407;
+    }
+
+    /**
+     * 408 Request Timeout
+     * @return bool
+     */
+    public function requestTimeout(): bool
+    {
+        return $this->getStatusCode() === 408;
+    }
+
+    /**
+     * 409 Conflict
+     * @return bool
+     */
+    public function conflict(): bool
+    {
+        return $this->getStatusCode() === 409;
+    }
+
+    /**
+     * 410 Gone
+     * @return bool
+     */
+    public function gone(): bool
+    {
+        return $this->getStatusCode() === 410;
+    }
+
+    /**
+     * 411 Length Required
+     * @return bool
+     */
+    public function lengthRequired(): bool
+    {
+        return $this->getStatusCode() === 411;
+    }
+
+    /**
+     * 422 Unprocessable Entity
+     * @return bool
+     */
+    public function unprocessableEntity(): bool
+    {
+        return $this->getStatusCode() === 422;
+    }
+
+    /**
+     * 429 Too Many Requests
+     * @return bool
+     */
+    public function tooManyRequests(): bool
+    {
+        return $this->getStatusCode() === 429;
+    }
+
+    /**
+     * 500 Internal Server Error
+     * @return bool
+     */
+    public function internalServerError(): bool
+    {
+        return $this->getStatusCode() === 500;
+    }
+
+    /**
+     * Get a response message.
      *
      * @return string|null
      */
@@ -116,39 +427,117 @@ class Response implements ResponseInterface
     }
 
     /**
-     * Get data.
+     * Determine is current content-type is JSON.
      *
-     * @param string|null $key
-     * @param mixed|null $default
-     * @return mixed
+     * @return bool
      */
-    public function getAttributes(?string $key = null, mixed $default = null): mixed
+    public function isJson(): bool
     {
-        if ($this->attributes === null) {
-            if($this->body
-                && is_string($this->body)
-                && isset($this->curlInfo['header_size'])
-                && is_int($this->curlInfo['header_size'])
-                && ($content = substr($this->body, $this->curlInfo['header_size']))
-            ){
-                $this->attributes = $this->parseJson($content);
-            } else {
-                $this->attributes = [];
+        if ($this->isJson === null) {
+            if (str_contains($this->getHeaderLine('Content-Type'), 'json')) {
+                return $this->isJson = true;
             }
+
+            $stream = $this->getBody();
+            if (!$stream->isReadable() || !$stream->isSeekable()) {
+                return $this->isJson = false;
+            }
+
+            $initialPosition = $stream->tell();
+            $stream->rewind();
+            $preview = $stream->read(16);
+            $stream->seek($initialPosition);
+            $firstChar = trim($preview)[0] ?? '';
+            $this->isJson = $firstChar === '{' || $firstChar === '[';
         }
-        return $key ? $this->getAttribute($key, $default) : $this->attributes;
+
+        return $this->isJson;
     }
 
     /**
-     * Parse JSON string.
+     * Decode JSON.
      *
-     * @param string $string
-     * @return array<int, mixed>
+     * @param bool $associative
+     * @return mixed
      */
-    protected function parseJson(string $string): array
+    public function json(bool $associative = true): mixed
     {
-        $content = json_decode($string, true);
-        return json_last_error() === JSON_ERROR_NONE ? $content :[];
+        $body = trim($this->getRaw());
+        if (!$this->isJson() || $body === '') {
+            return null;
+        }
+
+        $decoded = json_decode($body, $associative);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new RuntimeException(
+                'JSON decode error: ' . json_last_error_msg()
+            );
+        }
+        return $decoded;
+    }
+
+    /**
+     * Get data in an array.
+     *
+     * @return array<string, mixed>
+     * @deprecated Replaced with data()
+     */
+    public function getAttributes(): array
+    {
+        return $this->toArray();
+    }
+
+    /**
+     * Get data in an array
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray(): array
+    {
+        $data = $this->json();
+        return is_array($data) ? $data : [];
+    }
+
+    /**
+     * Convert to object.
+     *
+     * @return object|null
+     */
+    public function object(): ?object
+    {
+        $data = $this->json(false);
+        return is_object($data) ? $data : null;
+    }
+
+    /**
+     * Get raw body.
+     *
+     * @return string
+     */
+    public function getRaw(): string
+    {
+        return (string)$this->getBody();
+    }
+
+    /**
+     * Get raw
+     *
+     * @return string
+     * @see getRaw()
+     */
+    public function body(): string
+    {
+        return $this->getRaw();
+    }
+
+    /**
+     * Get error code.
+     *
+     * @return int
+     */
+    public function getErrno(): int
+    {
+        return $this->errno;
     }
 
     /**
@@ -162,32 +551,6 @@ class Response implements ResponseInterface
     }
 
     /**
-     * Get headers.
-     *
-     * @return array<string, mixed>
-     */
-    public function getHeaders(): array
-    {
-        if ($this->headers === null) {
-            $this->headers = [];
-            if ($this->body
-                && is_string($this->body)
-                && isset($this->curlInfo['header_size'])
-                && is_int($this->curlInfo['header_size'])
-            ) {
-                $rawHeaders = trim(substr($this->body, 0, $this->curlInfo['header_size']));
-                foreach (explode("\r\n", $rawHeaders) as $line) {
-                    if (strpos($line, ':') !== false) {
-                        [$key, $value] = explode(':', $line, 2);
-                        $this->headers[trim($key)] = trim($value);
-                    }
-                }
-            }
-        }
-        return $this->headers;
-    }
-
-    /**
      * Get total time.
      *
      * @return float
@@ -198,24 +561,47 @@ class Response implements ResponseInterface
     }
 
     /**
-     * Get response attribute by key.
+     * Get sink path.
+     *
+     * @return string|null
+     */
+    public function getSinkPath(): ?string
+    {
+        return $this->sinkPath;
+    }
+
+    /**
+     * Get a response attribute by key.
      *
      * @param string $key
      * @param mixed|null $default
      * @return mixed
+     * @deprecated Replaced with data($key, $default = null)
      */
     public function getAttribute(string $key, mixed $default = null): mixed
     {
-        if ($key === '') {
-            return $default;
+        return $this->data($key, $default);
+    }
+
+    /**
+     * Get a response attribute by key.
+     *
+     * @param string|null $key
+     * @param mixed|null $default
+     * @return mixed
+     */
+    public function data(?string $key = null, mixed $default = null): mixed
+    {
+        if ($this->attributes === null) {
+            $this->attributes = $this->toArray();
         }
 
-        if ($this->attributes === null) {
-            $this->getAttributes();
+        if ($this->attributes === []) {
+            return $key === null ? [] : $default;
         }
 
-        if ($this->attributes === null) {
-            return $default;
+        if ($key === null) {
+            return $this->attributes;
         }
 
         $segments = explode('.', $key);
@@ -239,12 +625,14 @@ class Response implements ResponseInterface
             $result = [];
 
             foreach ($array as $item) {
-                $value = $this->getRecursive($item, $segments, $default);
+                if (is_array($item)) {
+                    $value = $this->getRecursive($item, $segments, $default);
 
-                if (is_array($value)) {
-                    $result = array_merge($result, $value);
-                } else {
-                    $result[] = $value;
+                    if (is_array($value)) {
+                        $result = array_merge($result, $value);
+                    } else {
+                        $result[] = $value;
+                    }
                 }
             }
 
@@ -261,6 +649,10 @@ class Response implements ResponseInterface
             return $value;
         }
 
+        if (!is_array($value)) {
+            return $default;
+        }
+
         return $this->getRecursive($value, $segments, $default);
     }
 
@@ -269,20 +661,7 @@ class Response implements ResponseInterface
      */
     public function getProtocolVersion(): string
     {
-        if (isset($this->curlInfo['http_version'])) {
-            switch ($this->curlInfo['http_version']) {
-                case CURL_HTTP_VERSION_NONE: return 'HTTP/NONE';
-                case CURL_HTTP_VERSION_1_0: return 'HTTP/1.0';
-                case CURL_HTTP_VERSION_1_1: return 'HTTP/1.1';
-                case CURL_HTTP_VERSION_2: return 'HTTP/2';
-                case CURL_HTTP_VERSION_2TLS: return 'HTTP/2TLS';
-                case CURL_HTTP_VERSION_2_0: return 'HTTP/2.0';
-                case CURL_HTTP_VERSION_2_PRIOR_KNOWLEDGE: return 'HTTP/2 PRIOR KNOWLEDGE';
-                case CURL_HTTP_VERSION_3: return 'HTTP/3';
-                case CURL_HTTP_VERSION_3ONLY: return 'HTTP/3 ONLY';
-            }
-        }
-        return 'Unknown';
+        return $this->protocolVersion;
     }
 
     /**
@@ -290,10 +669,9 @@ class Response implements ResponseInterface
      */
     public function withProtocolVersion(string $version): MessageInterface
     {
-        if ($this->curlInfo !== false) {
-            $this->curlInfo['http_version'] = $version;
-        }
-        return $this;
+        $clone = clone $this;
+        $clone->protocolVersion = $version;
+        return $clone;
     }
 
     /**
@@ -301,8 +679,7 @@ class Response implements ResponseInterface
      */
     public function hasHeader(string $name): bool
     {
-        if ($this->headers === null) {  $this->getHeaders(); }
-        return isset($this->headers[$name]);
+        return isset($this->headers[strtolower($name)]);
     }
 
     /**
@@ -310,7 +687,7 @@ class Response implements ResponseInterface
      */
     public function getHeader(string $name): array
     {
-        return explode(',', $this->getHeaderLine($name));
+        return $this->headers[strtolower($name)] ?? [];
     }
 
     /**
@@ -318,7 +695,7 @@ class Response implements ResponseInterface
      */
     public function getHeaderLine(string $name): string
     {
-        return $this->hasHeader($name) && isset($this->headers[$name]) ? $this->headers[$name] : '';
+        return implode(', ', $this->getHeader($name));
     }
 
     /**
@@ -326,12 +703,9 @@ class Response implements ResponseInterface
      */
     public function withHeader(string $name, mixed $value): MessageInterface
     {
-        if ($this->hasHeader($name)) {
-            $this->withAddedHeader($name, $value);
-        } else {
-            $this->headers[$name] = $value;
-        }
-        return $this;
+        $clone = clone $this;
+        $clone->headers[strtolower($name)] = is_array($value) ? $value : [$value];
+        return $clone;
     }
 
     /**
@@ -339,10 +713,15 @@ class Response implements ResponseInterface
      */
     public function withAddedHeader(string $name, mixed $value): MessageInterface
     {
-        if ($this->hasHeader($name) && $value && is_string($value) && isset($this->headers[$name])) {
-            $this->headers[$name] .= ",$value";
-        }
-        return $this;
+        $clone = clone $this;
+        $name = strtolower($name);
+        $existing = $clone->headers[$name] ?? [];
+        $existing = is_array($existing) ? $existing : [$existing];
+        $value = is_array($value) ? $value : [$value];
+
+        $clone->headers[$name] = array_merge($existing, $value);
+
+        return $clone;
     }
 
     /**
@@ -351,9 +730,29 @@ class Response implements ResponseInterface
     public function withoutHeader(string $name): MessageInterface
     {
         if ($this->hasHeader($name)) {
-            unset($this->headers[$name]);
+            $clone = clone $this;
+            unset($clone->headers[strtolower($name)]);
+            return $clone;
         }
         return $this;
+    }
+
+    /**
+     * Get contents.
+     *
+     * @return string
+     */
+    public function getContents(): string
+    {
+        if ($this->body !== '') {
+            return $this->body;
+        }
+
+        if ($this->sinkPath && is_file($this->sinkPath)) {
+            return file_get_contents($this->sinkPath) ?: '';
+        }
+
+        return '';
     }
 
     /**
@@ -361,7 +760,14 @@ class Response implements ResponseInterface
      */
     public function getBody(): StreamInterface
     {
-        // TODO: Implement getBody() method.
+        if ($this->stream === null) {
+            if ($this->sinkPath !== null && is_file($this->sinkPath)) {
+                $this->stream = new FileStream($this->sinkPath);
+            } else {
+                $this->stream = new StringStream($this->body);
+            }
+        }
+        return $this->stream;
     }
 
     /**
@@ -369,8 +775,9 @@ class Response implements ResponseInterface
      */
     public function withBody(StreamInterface $body): MessageInterface
     {
-        // TODO: Implement withBody() method.
-        return $this;
+        $clone = clone $this;
+        $clone->body = (string)$body;
+        return $clone;
     }
 
     /**
@@ -378,9 +785,10 @@ class Response implements ResponseInterface
      */
     public function withStatus(int $code, string $reasonPhrase = ''): ResponseInterface
     {
-        $this->statusCode = $code;
-        $this->message = $reasonPhrase;
-        return $this;
+        $clone = clone $this;
+        $clone->statusCode = $code;
+        $clone->message = $reasonPhrase;
+        return $clone;
     }
 
     /**
