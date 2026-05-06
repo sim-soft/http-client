@@ -117,8 +117,9 @@ compatible framework or library.
 15. [Create Custom SDK](docs/CUSTOM_SDK.md)
     1. [Create SDK Client](docs/CUSTOM_SDK.md)
     2. [Create SDK Response](docs/CUSTOM_SDK.md)
-16. [PSR-18 Usage](docs/PSR18.md)
-17. [Macro](docs/MACRO.md)
+16. [OAuth2 Authentication](docs/OAUTH2.md)
+17. [PSR-18 Usage](docs/PSR18.md)
+18. [Macro](docs/MACRO.md)
 
 ## Install<a id="installation"></a>
 

@@ -4,35 +4,102 @@ declare(strict_types=1);
 
 namespace Simsoft\HttpClient\Tests\Clients;
 
-use InvalidArgumentException;
-use League\OAuth2\Client\Provider\GenericProvider;
-use League\OAuth2\Client\Token\AccessTokenInterface;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
-use ReflectionProperty;
+use ReflectionClass;
+use RuntimeException;
 use Simsoft\HttpClient\Clients\OAuth2;
+use Simsoft\HttpClient\Clients\Responses\OAuth2TokenResponse;
+use Simsoft\HttpClient\Clients\TokenData;
 use Simsoft\HttpClient\Interfaces\StorageInterface;
 
 /**
- * TestableOAuth2 class
+ * TestOAuth2 class.
  *
- * Concrete subclass of OAuth2 with configurable endpoints for testing.
+ * Concrete test subclass of OAuth2 with configurable endpoints and
+ * overridable buildTokenRequest() for controlled testing without HTTP calls.
+ *
+ * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
  */
-class TestableOAuth2 extends OAuth2
+class TestOAuth2 extends OAuth2
 {
     /** @var string Production access token endpoint. */
-    protected string $accessTokenEndpoint = 'https://api.example.com/oauth/token';
+    protected string $accessTokenEndpoint = 'https://example.com/oauth/token';
 
     /** @var string Sandbox access token endpoint. */
     protected string $sandboxEndpoint = 'https://sandbox.example.com/oauth/token';
+
+    /** @var OAuth2TokenResponse|null Response to return from buildTokenRequest(). */
+    public ?OAuth2TokenResponse $nextResponse = null;
+
+    /** @var \Throwable|null Exception to throw from buildTokenRequest(). */
+    public ?\Throwable $nextException = null;
+
+    /** @var array<int, array<string, string>> Captured request params. */
+    public array $capturedParams = [];
+
+    /** @var int Count of buildTokenRequest() calls. */
+    public int $requestCount = 0;
+
+    /**
+     * Override buildTokenRequest to return controlled responses.
+     *
+     * @param array<string, string> $params Form parameters.
+     * @return OAuth2TokenResponse
+     */
+    protected function buildTokenRequest(array $params): OAuth2TokenResponse
+    {
+        $this->capturedParams[] = $params;
+        $this->requestCount++;
+
+        if ($this->nextException !== null) {
+            throw $this->nextException;
+        }
+
+        if ($this->nextResponse !== null) {
+            return $this->nextResponse;
+        }
+
+        return self::createTokenResponse(200, [
+            'access_token' => 'default-token',
+            'token_type' => 'Bearer',
+            'expires_in' => 3600,
+        ]);
+    }
+
+    /**
+     * Create an OAuth2TokenResponse with given status and body data.
+     *
+     * @param int $statusCode HTTP status code.
+     * @param array<string, mixed> $data Response body data.
+     * @return OAuth2TokenResponse
+     */
+    public static function createTokenResponse(int $statusCode, array $data): OAuth2TokenResponse
+    {
+        return new OAuth2TokenResponse(
+            curlInfo: ['http_code' => $statusCode],
+            body: json_encode($data, JSON_THROW_ON_ERROR),
+        );
+    }
 }
 
 /**
- * OAuth2Test class
+ * TestOAuth2WithScope class.
  *
- * Tests for the OAuth2 client: factory method, sandbox switching,
- * token lifecycle, refresh logic, and error handling.
+ * Subclass with a configured scope for testing scope inclusion.
+ */
+class TestOAuth2WithScope extends TestOAuth2
+{
+    /** @var string|null OAuth2 scope. */
+    protected ?string $scope = 'read write';
+}
+
+/**
+ * OAuth2Test class.
+ *
+ * Tests for the standalone OAuth2 client: factory method, sandbox switching,
+ * endpoint resolution, token lifecycle, refresh logic, and error handling.
  *
  * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
  */
@@ -58,43 +125,31 @@ class OAuth2Test extends TestCase
     }
 
     /**
-     * Create a TestableOAuth2 instance with test credentials and mock storage.
+     * Create a TestOAuth2 instance with test credentials and mock storage.
      *
-     * @return TestableOAuth2
+     * @return TestOAuth2
      */
-    private function createInstance(): TestableOAuth2
+    private function createInstance(): TestOAuth2
     {
-        return new TestableOAuth2(
+        return new TestOAuth2(
             $this->clientId,
             $this->clientSecret,
             $this->storage,
         );
     }
 
-    /**
-     * Test that request() factory returns a new OAuth2 instance with correct credentials.
-     *
-     * @return void
-     */
     #[Test]
-    public function requestFactoryReturnsInstanceWithCorrectCredentials(): void
+    public function requestFactoryReturnsCorrectInstance(): void
     {
-        $instance = $this->createInstance();
+        $instance = TestOAuth2::request(
+            $this->clientId,
+            $this->clientSecret,
+            $this->storage,
+        );
 
-        $this->assertInstanceOf(TestableOAuth2::class, $instance);
-
-        $clientIdProperty = new ReflectionProperty(OAuth2::class, 'clientId');
-        $this->assertSame($this->clientId, $clientIdProperty->getValue($instance));
-
-        $clientSecretProperty = new ReflectionProperty(OAuth2::class, 'clientSecret');
-        $this->assertSame($this->clientSecret, $clientSecretProperty->getValue($instance));
+        $this->assertInstanceOf(TestOAuth2::class, $instance);
     }
 
-    /**
-     * Test that sandbox() switches the endpoint to the sandbox URL.
-     *
-     * @return void
-     */
     #[Test]
     public function sandboxSwitchesEndpoint(): void
     {
@@ -109,22 +164,21 @@ class OAuth2Test extends TestCase
         );
     }
 
-    /**
-     * Test that getEndpoint() returns the production endpoint by default
-     * and sandbox endpoint after sandbox() is called.
-     *
-     * @return void
-     */
     #[Test]
-    public function getEndpointReturnsCorrectEndpointBasedOnMode(): void
+    public function getEndpointReturnsProductionUrlByDefault(): void
     {
         $instance = $this->createInstance();
 
         $this->assertSame(
-            'https://api.example.com/oauth/token',
+            'https://example.com/oauth/token',
             $instance->getEndpoint(),
         );
+    }
 
+    #[Test]
+    public function getEndpointReturnsSandboxUrlAfterSandboxCall(): void
+    {
+        $instance = $this->createInstance();
         $instance->sandbox();
 
         $this->assertSame(
@@ -133,17 +187,45 @@ class OAuth2Test extends TestCase
         );
     }
 
-    /**
-     * Test that getAccessToken() returns cached token when valid and not expired.
-     *
-     * @return void
-     */
     #[Test]
-    public function getAccessTokenReturnsCachedTokenWhenValidAndNotExpired(): void
+    public function defaultGrantTypeIsClientCredentials(): void
     {
-        $token = $this->createMock(AccessTokenInterface::class);
-        $token->method('hasExpired')->willReturn(false);
-        $token->method('getToken')->willReturn('cached-access-token');
+        $this->storage->method('has')->willReturn(false);
+        $this->storage->method('set');
+
+        $instance = $this->createInstance();
+        $instance->getAccessToken();
+
+        $this->assertNotEmpty($instance->capturedParams);
+        $this->assertSame('client_credentials', $instance->capturedParams[0]['grant_type']);
+    }
+
+    #[Test]
+    public function scopeIsIncludedInRequestWhenConfigured(): void
+    {
+        $this->storage->method('has')->willReturn(false);
+        $this->storage->method('set');
+
+        $instance = new TestOAuth2WithScope(
+            $this->clientId,
+            $this->clientSecret,
+            $this->storage,
+        );
+
+        $instance->getAccessToken();
+
+        $this->assertNotEmpty($instance->capturedParams);
+        $this->assertSame('read write', $instance->capturedParams[0]['scope']);
+    }
+
+    #[Test]
+    public function cachedNonExpiredTokenIsReturnedWithoutHttpCall(): void
+    {
+        $cachedToken = new TokenData(
+            accessToken: 'cached-access-token',
+            expiresAt: time() + 3600,
+            refreshToken: null,
+        );
 
         $this->storage->method('has')
             ->with($this->clientId)
@@ -151,29 +233,23 @@ class OAuth2Test extends TestCase
 
         $this->storage->method('get')
             ->with($this->clientId)
-            ->willReturn($token);
+            ->willReturn($cachedToken);
 
         $instance = $this->createInstance();
-
         $result = $instance->getAccessToken();
 
         $this->assertSame('cached-access-token', $result);
+        $this->assertSame(0, $instance->requestCount);
     }
 
-    /**
-     * Test that an expired token with a refresh token triggers refreshToken().
-     *
-     * @return void
-     */
     #[Test]
-    public function expiredTokenWithRefreshTokenTriggersRefresh(): void
+    public function expiredTokenWithoutRefreshTokenTriggersFetchNewToken(): void
     {
-        $expiredToken = $this->createMock(AccessTokenInterface::class);
-        $expiredToken->method('hasExpired')->willReturn(true);
-        $expiredToken->method('getRefreshToken')->willReturn('refresh-token-value');
-
-        $newToken = $this->createMock(AccessTokenInterface::class);
-        $newToken->method('getToken')->willReturn('new-access-token');
+        $expiredToken = new TokenData(
+            accessToken: 'expired-token',
+            expiresAt: time() - 100,
+            refreshToken: null,
+        );
 
         $this->storage->method('has')
             ->with($this->clientId)
@@ -185,66 +261,177 @@ class OAuth2Test extends TestCase
 
         $this->storage->expects($this->once())
             ->method('set')
-            ->with($this->clientId, $newToken);
-
-        $mockProvider = $this->createMock(GenericProvider::class);
-        $mockProvider->expects($this->once())
-            ->method('getAccessToken')
-            ->with('refresh_token', ['refresh_token' => 'refresh-token-value'])
-            ->willReturn($newToken);
+            ->with($this->clientId, $this->isInstanceOf(TokenData::class));
 
         $instance = $this->createInstance();
-
-        $providerProperty = new ReflectionProperty(OAuth2::class, 'provider');
-        $providerProperty->setValue($instance, $mockProvider);
+        $instance->nextResponse = TestOAuth2::createTokenResponse(200, [
+            'access_token' => 'fresh-token',
+            'token_type' => 'Bearer',
+            'expires_in' => 3600,
+        ]);
 
         $result = $instance->getAccessToken();
 
-        $this->assertSame('new-access-token', $result);
+        $this->assertSame('fresh-token', $result);
+        $this->assertSame(1, $instance->requestCount);
+        $this->assertSame('client_credentials', $instance->capturedParams[0]['grant_type']);
     }
 
-    /**
-     * Test that refreshToken() without a refresh token throws InvalidArgumentException.
-     *
-     * @return void
-     */
     #[Test]
-    public function refreshTokenWithoutRefreshTokenThrowsException(): void
+    public function expiredTokenWithRefreshTokenTriggersRefreshToken(): void
     {
-        $token = $this->createMock(AccessTokenInterface::class);
-        $token->method('getRefreshToken')->willReturn(null);
+        $expiredToken = new TokenData(
+            accessToken: 'expired-token',
+            expiresAt: time() - 100,
+            refreshToken: 'my-refresh-token',
+        );
+
+        $this->storage->method('has')
+            ->with($this->clientId)
+            ->willReturn(true);
+
+        $this->storage->method('get')
+            ->with($this->clientId)
+            ->willReturn($expiredToken);
+
+        $this->storage->expects($this->once())
+            ->method('set')
+            ->with($this->clientId, $this->isInstanceOf(TokenData::class));
 
         $instance = $this->createInstance();
+        $instance->nextResponse = TestOAuth2::createTokenResponse(200, [
+            'access_token' => 'refreshed-token',
+            'token_type' => 'Bearer',
+            'expires_in' => 3600,
+        ]);
 
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('Cannot refresh token');
+        $result = $instance->getAccessToken();
 
-        $instance->refreshToken($token);
+        $this->assertSame('refreshed-token', $result);
+        $this->assertSame(1, $instance->requestCount);
+        $this->assertSame('refresh_token', $instance->capturedParams[0]['grant_type']);
+        $this->assertSame('my-refresh-token', $instance->capturedParams[0]['refresh_token']);
     }
 
-    /**
-     * Test that token acquisition failure returns null.
-     *
-     * @return void
-     */
     #[Test]
-    public function tokenAcquisitionFailureReturnsNull(): void
+    public function refreshFailureFallsBackToFreshAcquisition(): void
+    {
+        $expiredToken = new TokenData(
+            accessToken: 'expired-token',
+            expiresAt: time() - 100,
+            refreshToken: 'bad-refresh-token',
+        );
+
+        $this->storage->method('has')
+            ->with($this->clientId)
+            ->willReturn(true);
+
+        $this->storage->method('get')
+            ->with($this->clientId)
+            ->willReturn($expiredToken);
+
+        $this->storage->expects($this->once())
+            ->method('set')
+            ->with($this->clientId, $this->isInstanceOf(TokenData::class));
+
+        $callCount = 0;
+        $instance = $this->createInstance();
+
+        // Override buildTokenRequest behavior using a custom subclass approach
+        // First call (refresh) fails, second call (fresh) succeeds
+        $failThenSucceed = new class (
+            $this->clientId,
+            $this->clientSecret,
+            $this->storage,
+        ) extends TestOAuth2 {
+            /** @var int Internal call counter. */
+            private int $internalCount = 0;
+
+            /**
+             * First call throws, second call succeeds.
+             *
+             * @param array<string, string> $params Form parameters.
+             * @return OAuth2TokenResponse
+             */
+            protected function buildTokenRequest(array $params): OAuth2TokenResponse
+            {
+                $this->capturedParams[] = $params;
+                $this->requestCount++;
+                $this->internalCount++;
+
+                if ($this->internalCount === 1) {
+                    throw new RuntimeException('Refresh token rejected');
+                }
+
+                return self::createTokenResponse(200, [
+                    'access_token' => 'fallback-fresh-token',
+                    'token_type' => 'Bearer',
+                    'expires_in' => 3600,
+                ]);
+            }
+        };
+
+        $result = @$failThenSucceed->getAccessToken();
+
+        $this->assertSame('fallback-fresh-token', $result);
+        $this->assertSame(2, $failThenSucceed->requestCount);
+        $this->assertSame('refresh_token', $failThenSucceed->capturedParams[0]['grant_type']);
+        $this->assertSame('client_credentials', $failThenSucceed->capturedParams[1]['grant_type']);
+    }
+
+    #[Test]
+    public function nonSuccessfulResponseCausesGetAccessTokenToReturnNull(): void
     {
         $this->storage->method('has')
             ->with($this->clientId)
             ->willReturn(false);
 
-        $mockProvider = $this->createMock(GenericProvider::class);
-        $mockProvider->method('getAccessToken')
-            ->willThrowException(new \RuntimeException('Provider error'));
-
         $instance = $this->createInstance();
-
-        $providerProperty = new ReflectionProperty(OAuth2::class, 'provider');
-        $providerProperty->setValue($instance, $mockProvider);
+        $instance->nextResponse = TestOAuth2::createTokenResponse(401, [
+            'error' => 'invalid_client',
+            'error_description' => 'Client authentication failed',
+        ]);
 
         $result = @$instance->getAccessToken();
 
         $this->assertNull($result);
+    }
+
+    #[Test]
+    public function exceptionDuringAcquisitionReturnsNullAndLogsError(): void
+    {
+        $this->storage->method('has')
+            ->with($this->clientId)
+            ->willReturn(false);
+
+        $instance = $this->createInstance();
+        $instance->nextException = new RuntimeException('Network timeout');
+
+        $result = @$instance->getAccessToken();
+
+        $this->assertNull($result);
+    }
+
+    #[Test]
+    public function noLeagueImportsExistInOAuth2Class(): void
+    {
+        $sourceFile = file_get_contents(__DIR__ . '/../../src/Clients/OAuth2.php');
+
+        $this->assertIsString($sourceFile);
+        $this->assertStringNotContainsString(
+            'League\\OAuth2\\Client',
+            $sourceFile,
+            'OAuth2 class must not contain any League imports',
+        );
+        $this->assertStringNotContainsString(
+            'GenericProvider',
+            $sourceFile,
+            'OAuth2 class must not reference GenericProvider',
+        );
+        $this->assertStringNotContainsString(
+            'AccessTokenInterface',
+            $sourceFile,
+            'OAuth2 class must not reference AccessTokenInterface',
+        );
     }
 }

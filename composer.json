@@ -1,10 +1,19 @@
 {
   "name": "simsoft/http-client",
-  "description": "A simple CURL HTTP Client.",
+  "description": "A fluent, zero-dependency PHP HTTP client with built-in OAuth2, retry, middleware, and streaming — powered by cURL.",
   "keywords": [
-    "CURL",
-    "HTTP Client",
-    "API client"
+    "http-client",
+    "curl",
+    "oauth2",
+    "psr-18",
+    "psr-7",
+    "rest",
+    "api-client",
+    "retry",
+    "middleware",
+    "streaming",
+    "pkce",
+    "fluent-api"
   ],
   "type": "library",
   "license": "MIT",
@@ -21,8 +30,7 @@
     "ext-curl": "*",
     "psr/http-message": "^1.1|^2.0",
     "psr/http-client": "^1.0",
-    "psr/http-factory": "^1",
-    "league/oauth2-client": "^2"
+    "psr/http-factory": "^1"
   },
   "require-dev": {
     "phpunit/phpunit": "^11",

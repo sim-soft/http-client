@@ -1,85 +1,43 @@
 # OAuth2 Authentication Guide
 
-This guide covers two OAuth2 helper classes included with `simsoft/http-client`:
+The `OAuth2` class handles the full OAuth2 token lifecycle — acquisition,
+caching, expiry detection, and automatic refresh — using only the library's own
+`HttpClient`. Zero external dependencies required.
 
-| Class          | Best For                                                                          |
-|----------------|-----------------------------------------------------------------------------------|
-| `OAuth2`       | APIs that use `league/oauth2-client` (e.g. Google, GitHub, any standard provider) |
-| `SimpleOAuth2` | APIs with a simple token endpoint — no third-party OAuth2 package required        |
-
-Both classes handle token caching, expiry detection, and automatic re-fetch, so
-your
-application code never needs to manage tokens manually.
+Your application code never needs to manage tokens manually. Just call
+`getAccessToken()` and the class handles everything: checking the cache,
+refreshing expired tokens, and acquiring new ones as needed.
 
 ---
 
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
-2. [Which Class Should I Use?](#which-class)
-3. [OAuth2 — league/oauth2-client based](#oauth2)
-    - [Basic Usage](#oauth2-basic)
-    - [Sandbox Mode](#oauth2-sandbox)
-    - [Custom Scope](#oauth2-scope)
-    - [Custom Storage](#oauth2-storage)
-    - [PKCE Support](#oauth2-pkce)
-    - [Using with HttpClient](#oauth2-httpclient)
-4. [SimpleOAuth2 — built-in, no extra dependencies](#simpleoauth2)
-    - [Basic Usage](#simpleoauth2-basic)
-    - [Common Token Request Patterns](#simpleoauth2-patterns)
-    - [Using with HttpClient](#simpleoauth2-httpclient)
-    - [Accessing Token Details](#simpleoauth2-response)
-5. [Custom Storage](#custom-storage)
-6. [Session Storage Limitation](#session-storage)
+2. [Basic Usage](#oauth2-basic)
+3. [Sandbox Mode](#oauth2-sandbox)
+4. [Custom Scope](#oauth2-scope)
+5. [Custom Grant Type](#oauth2-grant-type)
+6. [Authorization Code Flow with PKCE](#oauth2-auth-code)
+7. [Custom Storage](#oauth2-storage)
+8. [Using with HttpClient via Middleware](#oauth2-httpclient)
+9. [TokenData Value Object](#oauth2-tokendata)
+10. [StorageInterface](#storage-interface)
+11. [Storage Notes](#session-storage)
+12. [Comparison with Other Libraries](#comparison)
 
 ---
 
 ## Prerequisites<a id="prerequisites"></a>
 
-**Always required:**
-
 ```shell
 composer require simsoft/http-client
 ```
 
-**Required only for `OAuth2`:**
-
-```shell
-composer require league/oauth2-client
-```
-
-`SimpleOAuth2` has no additional dependencies beyond `simsoft/http-client`
-itself.
+That's it — only `ext-curl` is required at runtime.
 
 ---
 
-## Which Class Should I Use?<a id="which-class"></a>
-
-**Use `OAuth2` when:**
-
-- Your project already uses `league/oauth2-client`
-- The API has a dedicated `league/oauth2-client` provider package (Google,
-  GitHub, Stripe, etc.)
-- You need PKCE support
-- You need `authorization_code` or `password` grant flows
-
-**Use `SimpleOAuth2` when:**
-
-- You want zero extra dependencies
-- The API uses a straightforward `client_credentials` POST with form data or
-  Basic Auth
-- You want to keep your stack lean for microservices or CLI tools
-
----
-
-## OAuth2<a id="oauth2"></a>
-
-`OAuth2` wraps `league/oauth2-client`'s `GenericProvider` and adds automatic
-token caching, expiry checking, and transparent refresh.
-
-Namespace: `Simsoft\HttpClient\Clients`
-
-### Basic Usage<a id="oauth2-basic"></a>
+## Basic Usage<a id="oauth2-basic"></a>
 
 Subclass `OAuth2` and set the token endpoint:
 
@@ -125,9 +83,19 @@ $response = HttpClient::make()
     ->get('/users');
 ```
 
+**How it works internally:**
+
+1. Checks storage for a cached token keyed by client ID
+2. If cached and not expired → returns the token immediately (no network call)
+3. If expired and a refresh token exists → attempts refresh via `refresh_token`
+   grant
+4. If refresh fails or no refresh token → acquires a new token via the
+   configured grant type
+5. Stores the result as a serializable `TokenData` object
+
 ---
 
-### Sandbox Mode<a id="oauth2-sandbox"></a>
+## Sandbox Mode<a id="oauth2-sandbox"></a>
 
 Set both endpoints in your subclass and call `->sandbox()` at runtime:
 
@@ -138,8 +106,8 @@ use Simsoft\HttpClient\Clients\OAuth2;
 
 class MyApiOAuth2 extends OAuth2
 {
-    protected string $accessTokenEndpoint        = 'https://api.example.com/oauth/token';
-    protected string $sandboxAccessTokenEndpoint = 'https://sandbox.api.example.com/oauth/token';
+    protected string $accessTokenEndpoint = 'https://api.example.com/oauth/token';
+    protected string $sandboxEndpoint     = 'https://sandbox.api.example.com/oauth/token';
 }
 ```
 
@@ -156,11 +124,18 @@ $token = MyApiOAuth2::request('sandbox-client-id', 'sandbox-client-secret')
     ->getAccessToken();
 ```
 
+You can also inspect the active endpoint:
+
+```php
+$oauth = MyApiOAuth2::request('client-id', 'client-secret')->sandbox();
+echo $oauth->getEndpoint(); // "https://sandbox.api.example.com/oauth/token"
+```
+
 ---
 
-### Custom Scope<a id="oauth2-scope"></a>
+## Custom Scope<a id="oauth2-scope"></a>
 
-Set `$scope` in the subclass or override per-request:
+Set `$scope` in the subclass to include it in all token requests:
 
 ```php
 namespace App\Clients;
@@ -174,13 +149,305 @@ class MyApiOAuth2 extends OAuth2
 }
 ```
 
+When `$scope` is `null` (the default), the `scope` parameter is omitted from
+the token request entirely.
+
 ---
 
-### Custom Storage<a id="oauth2-storage"></a>
+## Custom Grant Type<a id="oauth2-grant-type"></a>
 
-By default, tokens are stored in the PHP session via `SessionStorage`. Pass any
-`StorageInterface` implementation as the third argument to use a different
-backend:
+The default grant type is `client_credentials`. Override `$grantType` in your
+subclass for different flows:
+
+```php
+namespace App\Clients;
+
+use Simsoft\HttpClient\Clients\OAuth2;
+
+class MyApiOAuth2 extends OAuth2
+{
+    protected string $accessTokenEndpoint = 'https://api.example.com/oauth/token';
+    protected string $grantType = 'client_credentials'; // default
+}
+```
+
+The `grant_type` parameter is included automatically in all token requests.
+
+---
+
+## Authorization Code Flow with PKCE<a id="oauth2-auth-code"></a>
+
+The authorization code flow is designed for applications where a user
+authenticates via a browser redirect. PKCE (Proof Key for Code Exchange,
+RFC 7636) is applied automatically to protect against authorization code
+interception attacks.
+
+**How it works:**
+
+1. Your app generates an authorization URL and redirects the user to the
+   provider's login page
+2. The user authenticates and grants consent
+3. The provider redirects back to your app with an authorization `code`
+4. Your app exchanges the code for an access token
+
+Once the token is stored, subsequent calls to `getAccessToken()` use the cached
+token (or refresh it automatically if a refresh token is available) — identical
+to the `client_credentials` flow.
+
+### Basic Auth Code Setup
+
+Subclass `OAuth2` and configure the authorization endpoint, token endpoint, and
+redirect URI:
+
+```php
+namespace App\Clients;
+
+use Simsoft\HttpClient\Clients\OAuth2;
+
+class GoogleOAuth2 extends OAuth2
+{
+    protected string $accessTokenEndpoint = 'https://oauth2.googleapis.com/token';
+    protected string $sandboxEndpoint     = 'https://oauth2.sandbox.googleapis.com/token';
+
+    protected string $authorizeEndpoint    = 'https://accounts.google.com/o/oauth2/v2/auth';
+    protected string $sandboxAuthEndpoint  = 'https://accounts.google.com/o/oauth2/v2/auth';
+
+    protected string $redirectUri = 'https://myapp.example.com/oauth/callback';
+
+    protected ?string $scope = 'openid email profile';
+}
+```
+
+### Redirect the User
+
+Generate the authorization URL and redirect the user's browser:
+
+```php
+use App\Clients\GoogleOAuth2;
+
+$oauth = GoogleOAuth2::request('your-client-id', 'your-client-secret');
+
+$authUrl = $oauth->getAuthorizationUrl();
+
+// Redirect the user to the provider's login page
+header('Location: ' . $authUrl);
+exit;
+```
+
+The generated URL includes all required parameters: `client_id`, `redirect_uri`,
+`response_type=code`, `scope`, `state` (CSRF protection), `code_challenge`, and
+`code_challenge_method=S256`. The PKCE verifier and state are stored
+automatically via the configured `StorageInterface`.
+
+### Handle the Callback
+
+When the provider redirects back to your `$redirectUri`, exchange the
+authorization code for tokens:
+
+```php
+use App\Clients\GoogleOAuth2;
+
+$oauth = GoogleOAuth2::request('your-client-id', 'your-client-secret');
+
+// The provider sends ?code=...&state=... to your redirect URI
+$code  = $_GET['code'];
+$state = $_GET['state'];
+
+$tokenData = $oauth->exchangeCode($code, $state);
+
+// Token is now stored — use getAccessToken() for subsequent API calls
+echo $tokenData->accessToken;
+```
+
+`exchangeCode()` validates the `state` parameter against the stored value
+(CSRF protection), sends the PKCE `code_verifier` to the token endpoint, and
+stores the resulting `TokenData`. If state validation fails, a
+`RuntimeException` is thrown.
+
+### Using the Token
+
+After the initial exchange, use `getAccessToken()` exactly like the
+`client_credentials` flow. The token is cached and refreshed automatically:
+
+```php
+use App\Clients\GoogleOAuth2;
+use Simsoft\HttpClient\HttpClient;
+
+$oauth = GoogleOAuth2::request('your-client-id', 'your-client-secret');
+
+$token = $oauth->getAccessToken();
+
+$response = HttpClient::make()
+    ->withBaseUrl('https://www.googleapis.com')
+    ->withBearerToken($token)
+    ->get('/oauth2/v2/userinfo');
+```
+
+### Complete Working Example
+
+Putting it all together — subclass definition, redirect, callback, and token
+usage:
+
+```php
+// 1. Define your provider subclass (e.g., app/Clients/GoogleOAuth2.php)
+namespace App\Clients;
+
+use Simsoft\HttpClient\Clients\OAuth2;
+
+class GoogleOAuth2 extends OAuth2
+{
+    protected string $accessTokenEndpoint = 'https://oauth2.googleapis.com/token';
+    protected string $authorizeEndpoint   = 'https://accounts.google.com/o/oauth2/v2/auth';
+    protected string $redirectUri         = 'https://myapp.example.com/oauth/callback';
+    protected ?string $scope              = 'openid email profile';
+}
+```
+
+```php
+// 2. Redirect the user (e.g., routes/login.php)
+use App\Clients\GoogleOAuth2;
+
+$oauth   = GoogleOAuth2::request('your-client-id', 'your-client-secret');
+$authUrl = $oauth->getAuthorizationUrl();
+
+header('Location: ' . $authUrl);
+exit;
+```
+
+```php
+// 3. Handle the callback (e.g., routes/callback.php)
+use App\Clients\GoogleOAuth2;
+
+$oauth     = GoogleOAuth2::request('your-client-id', 'your-client-secret');
+$tokenData = $oauth->exchangeCode($_GET['code'], $_GET['state']);
+
+// Store user session, etc.
+$_SESSION['user_token'] = $tokenData->accessToken;
+```
+
+```php
+// 4. Use the token for API calls
+use App\Clients\GoogleOAuth2;
+use Simsoft\HttpClient\HttpClient;
+
+$token = GoogleOAuth2::request('your-client-id', 'your-client-secret')
+    ->getAccessToken();
+
+$response = HttpClient::make()
+    ->withBaseUrl('https://www.googleapis.com')
+    ->withBearerToken($token)
+    ->get('/oauth2/v2/userinfo');
+```
+
+### Provider Extensibility
+
+The authorization code flow exposes three protected methods that provider
+subclasses can override to accommodate provider-specific behavior:
+
+| Method                       | Purpose                                              |
+|------------------------------|------------------------------------------------------|
+| `buildAuthorizationParams()` | Add custom query parameters to the authorization URL |
+| `buildCodeExchangeParams()`  | Add or modify POST parameters for the token exchange |
+| `parseTokenResponse()`       | Handle non-standard token response fields            |
+
+#### Example — Google with offline access
+
+Google requires `access_type=offline` to issue a refresh token and
+`prompt=consent`
+to force the consent screen on re-authentication:
+
+```php
+namespace App\Clients;
+
+use Simsoft\HttpClient\Clients\OAuth2;
+
+class GoogleOAuth2 extends OAuth2
+{
+    protected string $accessTokenEndpoint = 'https://oauth2.googleapis.com/token';
+    protected string $authorizeEndpoint   = 'https://accounts.google.com/o/oauth2/v2/auth';
+    protected string $redirectUri         = 'https://myapp.example.com/oauth/callback';
+    protected ?string $scope              = 'openid email profile';
+
+    protected function buildAuthorizationParams(string $state, string $codeChallenge): array
+    {
+        $params = parent::buildAuthorizationParams($state, $codeChallenge);
+
+        $params['access_type'] = 'offline';
+        $params['prompt'] = 'consent';
+
+        return $params;
+    }
+}
+```
+
+#### Example — Microsoft with tenant-specific endpoint
+
+```php
+namespace App\Clients;
+
+use Simsoft\HttpClient\Clients\OAuth2;
+
+class MicrosoftOAuth2 extends OAuth2
+{
+    protected string $accessTokenEndpoint = 'https://login.microsoftonline.com/common/oauth2/v2.0/token';
+    protected string $authorizeEndpoint   = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize';
+    protected string $redirectUri         = 'https://myapp.example.com/oauth/callback';
+    protected ?string $scope              = 'openid profile email User.Read';
+
+    protected function buildCodeExchangeParams(string $code, string $verifier): array
+    {
+        $params = parent::buildCodeExchangeParams($code, $verifier);
+
+        // Microsoft requires tenant in some configurations
+        $params['tenant'] = 'common';
+
+        return $params;
+    }
+}
+```
+
+#### Example — Custom token response parsing
+
+Some providers return non-standard fields. Override `parseTokenResponse()` to
+handle them:
+
+```php
+namespace App\Clients;
+
+use Simsoft\HttpClient\Clients\OAuth2;
+use Simsoft\HttpClient\Clients\Responses\OAuth2TokenResponse;
+use Simsoft\HttpClient\Clients\TokenData;
+
+class CustomProviderOAuth2 extends OAuth2
+{
+    protected string $accessTokenEndpoint = 'https://provider.example.com/oauth/token';
+    protected string $authorizeEndpoint   = 'https://provider.example.com/oauth/authorize';
+    protected string $redirectUri         = 'https://myapp.example.com/oauth/callback';
+
+    protected function parseTokenResponse(OAuth2TokenResponse $response): TokenData
+    {
+        // Provider uses "token" instead of "access_token"
+        $data = $response->toArray();
+
+        return new TokenData(
+            accessToken:  $data['token'] ?? $data['access_token'] ?? '',
+            expiresAt:    time() + ($data['expires_in'] ?? 3600) - 30,
+            refreshToken: $data['refresh_token'] ?? null,
+            tokenType:    $data['token_type'] ?? 'Bearer',
+            scope:        $data['scope'] ?? null,
+        );
+    }
+}
+```
+
+---
+
+## Custom Storage<a id="oauth2-storage"></a>
+
+By default, tokens are stored on the filesystem via `FileStorage` (in
+`sys_get_temp_dir()/oauth_tokens/`). This works in all contexts — web, CLI,
+queues, and workers. Pass any `StorageInterface` implementation as the third
+argument to use a different backend:
 
 ```php
 use App\Clients\MyApiOAuth2;
@@ -192,35 +459,15 @@ $token = MyApiOAuth2::request('client-id', 'client-secret', $storage)
     ->getAccessToken();
 ```
 
----
-
-### PKCE Support<a id="oauth2-pkce"></a>
-
-Enable PKCE (Proof Key for Code Exchange) by setting `$enablePKCE = true` in
-your subclass:
-
-```php
-namespace App\Clients;
-
-use Simsoft\HttpClient\Clients\OAuth2;
-
-class MyApiOAuth2 extends OAuth2
-{
-    protected string $accessTokenEndpoint = 'https://api.example.com/oauth/token';
-    protected bool $enablePKCE = true;
-}
-```
-
-PKCE uses the `S256` method (`code_challenge_method=S256`) as required by RFC
-7636.
+See [StorageInterface](#storage-interface) below for the full interface and a
+Redis example.
 
 ---
 
-### Using with HttpClient via Middleware <a id="oauth2-httpclient"></a>
+## Using with HttpClient via Middleware<a id="oauth2-httpclient"></a>
 
 The cleanest pattern is to inject token acquisition into middleware so all
-requests
-are automatically authenticated without the caller managing tokens:
+requests are automatically authenticated:
 
 ```php
 use Closure;
@@ -248,278 +495,72 @@ $response = $client->post('/orders', ['item_id' => 42, 'qty' => 1]);
 
 ---
 
-## SimpleOAuth2<a id="simpleoauth2"></a>
+## TokenData Value Object<a id="oauth2-tokendata"></a>
 
-`SimpleOAuth2` is an abstract base class that extends `HttpClient` directly. It
-handles token caching and expiry, but leaves the actual token HTTP request up to
-you
-via the `postRequest()` abstract method. No `league/oauth2-client` is required.
+Tokens are stored internally as `TokenData` — a serializable value object with
+only scalar properties. This ensures safe persistence in PHP sessions, Redis,
+databases, or any cache backend.
 
 Namespace: `Simsoft\HttpClient\Clients`
 
-### Basic Usage<a id="simpleoauth2-basic"></a>
-
-Subclass `SimpleOAuth2` and implement `postRequest()`:
-
 ```php
-namespace App\Clients;
+use Simsoft\HttpClient\Clients\TokenData;
 
-use Simsoft\HttpClient\Clients\SimpleOAuth2;
-use Simsoft\HttpClient\Responses\SimpleOAuth2Response;
+// TokenData is created internally by OAuth2, but you can inspect it:
+$tokenData = new TokenData(
+    accessToken:  'eyJhbGciOiJSUzI1NiJ9...',
+    expiresAt:    time() + 3600,
+    refreshToken: 'def50200...',
+    tokenType:    'Bearer',
+    scope:        'read:users write:orders',
+);
 
-class MyApiClient extends SimpleOAuth2
-{
-    /**
-     * Perform the token request.
-     * This method is called automatically when a token is needed.
-     * Full request setup is required each time since the state is flushed after each request.
-     */
-    protected function postRequest(): SimpleOAuth2Response
-    {
-        /** @var SimpleOAuth2Response */
-        return $this
-            ->withBaseUrl('https://api.example.com')
-            ->withForm([
-                'grant_type'    => 'client_credentials',
-                'client_id'     => $this->clientId,
-                'client_secret' => $this->clientSecret,
-            ])
-            ->post('/oauth/token');
-    }
-}
+// Check expiry
+$tokenData->hasExpired(); // false (if within the hour)
+
+// Convert to array (useful for custom storage backends)
+$array = $tokenData->toArray();
+// [
+//     'access_token'  => 'eyJhbGciOiJSUzI1NiJ9...',
+//     'expires_at'    => 1714000770,
+//     'refresh_token' => 'def50200...',
+//     'token_type'    => 'Bearer',
+//     'scope'         => 'read:users write:orders',
+// ]
+
+// Reconstruct from array
+$restored = TokenData::fromArray($array);
 ```
 
-Acquire a token:
+**Properties:**
 
-```php
-use App\Clients\MyApiClient;
+| Property       | Type      | Description                                    |
+|----------------|-----------|------------------------------------------------|
+| `accessToken`  | `string`  | The OAuth2 access token string                 |
+| `expiresAt`    | `int`     | Unix timestamp when the token expires          |
+| `refreshToken` | `?string` | Refresh token (null if not provided by server) |
+| `tokenType`    | `?string` | Token type, typically "Bearer"                 |
+| `scope`        | `?string` | Granted scope string                           |
 
-$token = MyApiClient::makeWith('your-client-id', 'your-client-secret')
-    ->getAccessToken();
+**Methods:**
 
-if ($token === null) {
-    throw new RuntimeException('Could not obtain access token.');
-}
-```
+| Method         | Returns  | Description                                |
+|----------------|----------|--------------------------------------------|
+| `hasExpired()` | `bool`   | True if `time() >= expiresAt`              |
+| `toArray()`    | `array`  | Plain array representation for storage     |
+| `fromArray()`  | `static` | Reconstruct a TokenData from a plain array |
+
+> **Note:** The `OAuth2` class applies a 30-second safety buffer when computing
+> `expiresAt` from the server's `expires_in` value. This accounts for clock
+> skew and network latency, ensuring tokens are refreshed slightly before they
+> actually expire.
 
 ---
 
-### Common Token Request Patterns <a id="simpleoauth2-patterns"></a>
+## StorageInterface<a id="storage-interface"></a>
 
-**Form POST with client credentials in the body** (most common):
-
-```php
-protected function postRequest(): SimpleOAuth2Response
-{
-    /** @var SimpleOAuth2Response */
-    return $this
-        ->withBaseUrl('https://api.example.com')
-        ->withForm([
-            'grant_type'    => 'client_credentials',
-            'client_id'     => $this->clientId,
-            'client_secret' => $this->clientSecret,
-        ])
-        ->post('/oauth/token');
-}
-```
-
-**HTTP Basic Auth with form body** (RFC 6749 recommended):
-
-```php
-protected function postRequest(): SimpleOAuth2Response
-{
-    /** @var SimpleOAuth2Response */
-    return $this
-        ->withBaseUrl('https://api.example.com')
-        ->withHeader('Authorization', 'Basic ' . base64_encode($this->clientId . ':' . $this->clientSecret))
-        ->withForm(['grant_type' => 'client_credentials'])
-        ->post('/oauth/token');
-}
-```
-
-**JSON body** (some non-standard APIs):
-
-```php
-protected function postRequest(): SimpleOAuth2Response
-{
-    /** @var SimpleOAuth2Response */
-    return $this
-        ->withBaseUrl('https://api.example.com')
-        ->withJson([
-            'grant_type'    => 'client_credentials',
-            'client_id'     => $this->clientId,
-            'client_secret' => $this->clientSecret,
-        ])
-        ->post('/oauth/token');
-}
-```
-
-**With scope:**
-
-```php
-protected function postRequest(): SimpleOAuth2Response
-{
-    /** @var SimpleOAuth2Response */
-    return $this
-        ->withBaseUrl('https://api.example.com')
-        ->withForm([
-            'grant_type'    => 'client_credentials',
-            'client_id'     => $this->clientId,
-            'client_secret' => $this->clientSecret,
-            'scope'         => 'read:users write:orders',
-        ])
-        ->post('/oauth/token');
-}
-```
-
-**Sandbox support:**
-
-```php
-namespace App\Clients;
-
-use Simsoft\HttpClient\Clients\SimpleOAuth2;
-use Simsoft\HttpClient\Responses\SimpleOAuth2Response;
-
-class MyApiClient extends SimpleOAuth2
-{
-    protected string $tokenEndpoint        = 'https://api.example.com/oauth/token';
-    protected string $sandboxTokenEndpoint = 'https://sandbox.api.example.com/oauth/token';
-    protected bool $sandboxMode = false;
-
-    public function sandbox(): static
-    {
-        $this->sandboxMode = true;
-        return $this;
-    }
-
-    protected function postRequest(): SimpleOAuth2Response
-    {
-        $endpoint = $this->sandboxMode
-            ? $this->sandboxTokenEndpoint
-            : $this->tokenEndpoint;
-
-        /** @var SimpleOAuth2Response */
-        return $this
-            ->withBaseUrl($endpoint)
-            ->withForm([
-                'grant_type'    => 'client_credentials',
-                'client_id'     => $this->clientId,
-                'client_secret' => $this->clientSecret,
-            ])
-            ->post('/token');
-    }
-}
-```
-
-```php
-// Production
-$token = MyApiClient::makeWith('client-id', 'secret')->getAccessToken();
-
-// Sandbox
-$token = MyApiClient::makeWith('sandbox-id', 'sandbox-secret')
-    ->sandbox()
-    ->getAccessToken();
-```
-
----
-
-### Using with HttpClient via Middleware<a id="simpleoauth2-httpclient"></a>
-
-Since `SimpleOAuth2` extends `HttpClient`, the subclass is also a full HTTP
-client
-and can make API requests directly. The cleanest pattern is to separate token
-management from API requests using middleware:
-
-```php
-namespace App\Clients;
-
-use Closure;
-use Simsoft\HttpClient\Clients\SimpleOAuth2;
-use Simsoft\HttpClient\HttpClient;
-use Simsoft\HttpClient\Response;
-use Simsoft\HttpClient\Responses\SimpleOAuth2Response;
-
-class MyApiClient extends SimpleOAuth2
-{
-    protected string $apiBaseUrl = 'https://api.example.com';
-
-    protected function postRequest(): SimpleOAuth2Response
-    {
-        /** @var SimpleOAuth2Response */
-        return $this
-            ->withBaseUrl($this->apiBaseUrl)
-            ->withForm([
-                'grant_type'    => 'client_credentials',
-                'client_id'     => $this->clientId,
-                'client_secret' => $this->clientSecret,
-            ])
-            ->post('/oauth/token');
-    }
-
-    /**
-     * Get an authenticated HttpClient instance ready to make API requests.
-     */
-    public function getAuthenticatedClient(): HttpClient
-    {
-        return HttpClient::make()
-            ->withBaseUrl($this->apiBaseUrl)
-            ->withMiddleware(function (HttpClient $request, Closure $next): Response {
-                $token = $this->getAccessToken();
-                if ($token === null) {
-                    throw new \RuntimeException('Unable to obtain access token.');
-                }
-                $request->withBearerToken($token);
-                return $next();
-            }, 'oauth2');
-    }
-}
-```
-
-```php
-use App\Clients\MyApiClient;
-
-$client = MyApiClient::makeWith('your-client-id', 'your-client-secret')
-    ->getAuthenticatedClient();
-
-// All requests are automatically authenticated
-$users  = $client->get('/users');
-$orders = $client->get('/orders', ['status' => 'pending']);
-$result = $client->post('/orders', ['item_id' => 42]);
-```
-
----
-
-### Accessing Token Details<a id="simpleoauth2-response"></a>
-
-When you need to inspect the token response directly, call `postRequest()`
-manually
-or work with the `SimpleOAuth2Response` from the response:
-
-```php
-use Simsoft\HttpClient\Responses\SimpleOAuth2Response;
-
-/** @var SimpleOAuth2Response $response */
-$response = MyApiClient::makeWith('client-id', 'secret')->postRequest();
-
-if ($response->ok()) {
-    echo $response->getToken();        // "eyJhbGci..."
-    echo $response->getTokenType();    // "Bearer"
-    echo $response->getExpiresIn();    // 3600 (seconds, relative)
-    echo $response->getExpiresAt();    // 1714000770 (Unix timestamp, absolute)
-    echo $response->getRefreshToken(); // "def502..." or null
-    echo $response->getScope();        // "read:users write:orders" or null
-    echo $response->hasExpired()
-        ? 'Token has expired'
-        : 'Token is still valid';
-}
-```
-
----
-
-## Custom Storage<a id="custom-storage"></a>
-
-Both `OAuth2` and `SimpleOAuth2` accept any `StorageInterface` implementation.
-The interface requires four methods:
+The `OAuth2` class accepts any `StorageInterface` implementation for token
+persistence. The interface requires four methods:
 
 ```php
 namespace Simsoft\HttpClient\Interfaces;
@@ -533,7 +574,7 @@ interface StorageInterface
 }
 ```
 
-Example — Redis-backed storage:
+### Example — Redis-backed storage
 
 ```php
 namespace App\Storage;
@@ -574,7 +615,7 @@ class RedisStorage implements StorageInterface
 use App\Clients\MyApiOAuth2;
 use App\Storage\RedisStorage;
 
-$redis   = new Redis();
+$redis = new \Redis();
 $redis->connect('127.0.0.1', 6379);
 $storage = new RedisStorage($redis, ttl: 3600);
 
@@ -584,63 +625,55 @@ $token = MyApiOAuth2::request('client-id', 'client-secret', $storage)
 
 ---
 
-## Session Storage Limitation<a id="session-storage"></a>
+## Storage Notes<a id="session-storage"></a>
 
-The default `SessionStorage` stores tokens in `$_SESSION`. This has two
-important
-limitations:
+**Default: FileStorage**
+The default `FileStorage` persists tokens as serialized files in the system temp
+directory (`sys_get_temp_dir()/oauth_tokens/`). This works in web, CLI, queues,
+and workers without any configuration.
 
-**1. Not suitable for CLI, queues, or workers.**
-`$_SESSION` is only available in web request contexts. Use `RedisStorage`,
-a database-backed storage, or a PSR-6/PSR-16 cache adapter for non-web
-environments.
-
-**2. `SimpleOAuth2Response` is not directly serializable.**
-`SimpleOAuth2Response` extends `Response`, which contains a `StreamInterface`
-property that PHP cannot serialize. If you use `SessionStorage` with
-`SimpleOAuth2`,
-you must store only the token string and expiry, not the response object.
-
-The recommended pattern is to wrap the token data in a plain serializable
-object:
+**SessionStorage (optional)**
+If you prefer session-based storage (e.g., tokens scoped per user session), pass
+a `SessionStorage` instance explicitly:
 
 ```php
-// Plain serializable token holder
-class TokenData
-{
-    public function __construct(
-        public readonly string $accessToken,
-        public readonly int $expiresAt,
-        public readonly ?string $refreshToken = null,
-        public readonly ?string $tokenType = null,
-        public readonly ?string $scope = null,
-    ) {}
-}
+use App\Clients\MyApiOAuth2;
+use Simsoft\HttpClient\Clients\Helpers\SessionStorage;
+
+$token = MyApiOAuth2::request('client-id', 'client-secret', new SessionStorage('oauth'))
+    ->getAccessToken();
 ```
 
-Then in `getAccessToken()` (override in your subclass), store `TokenData`
-instead
-of the raw `Response`:
+Note: `SessionStorage` requires `session_start()` and is not suitable for CLI
+or long-running processes.
 
-```php
-protected function fetchAndStoreToken(): ?string
-{
-    $response = $this->postRequest();
-    if (!$response->ok()) {
-        return null;
-    }
+**Stored objects must be serializable.**
+The `OAuth2` class stores `TokenData` objects, which contain only scalar
+properties and are fully serializable. This is safe for both file and session
+storage.
 
-    $tokenData = new TokenData(
-        accessToken:  $response->getToken() ?? '',
-        expiresAt:    $response->getExpiresAt() ?? (time() + 3600),
-        refreshToken: $response->getRefreshToken(),
-        tokenType:    $response->getTokenType(),
-        scope:        $response->getScope(),
-    );
+---
 
-    $this->storage->set($this->clientId, $tokenData);
-    return $tokenData->accessToken;
-}
-```
+## Comparison with Other Libraries<a id="comparison"></a>
 
-This makes session storage safe since `TokenData` contains only scalar values.
+| Aspect                   | **Simsoft OAuth2**                                    | **league/oauth2-client**      | **Laravel Socialite**         | **Guzzle + manual** |
+|--------------------------|-------------------------------------------------------|-------------------------------|-------------------------------|---------------------|
+| **Dependencies**         | None (ext-curl only)                                  | Guzzle + PSR packages         | Laravel framework             | Guzzle              |
+| **Grant types**          | client_credentials, authorization_code, refresh_token | All (+ password, custom)      | Authorization code only       | Whatever you build  |
+| **PKCE (S256)**          | ✅ Built-in, always-on                                 | ✅ Via provider option         | ❌ Not built-in                | Manual              |
+| **Token caching**        | ✅ Built-in (FileStorage, Redis, or custom)            | ❌ You manage it               | Session-based                 | ❌ You manage it     |
+| **Auto-refresh**         | ✅ Transparent                                         | Manual                        | Not applicable                | Manual              |
+| **CSRF (state)**         | ✅ Auto-generated + validated                          | ✅ Built-in                    | ✅ Built-in                    | Manual              |
+| **Provider packages**    | Override points (3 methods)                           | 100+ pre-built packages       | 20+ providers                 | None                |
+| **Setup complexity**     | Subclass + 2–3 properties                             | Provider + manual token logic | Config + routes + controllers | Raw HTTP calls      |
+| **Standalone**           | ✅                                                     | ✅                             | ❌ (Laravel only)              | ✅                   |
+| **Lines of code to use** | ~10                                                   | ~20–30                        | ~30+ (with routes)            | ~30–40              |
+
+### When to choose each
+
+| Choose                   | When                                                                                                                                       |
+|--------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
+| **Simsoft OAuth2**       | You want zero dependencies, automatic token lifecycle, and a simple subclass-based API. Ideal for microservices, CLI tools, and libraries. |
+| **league/oauth2-client** | You need a pre-built provider package (Google, GitHub, Stripe, etc.) with provider-specific user info fetching.                            |
+| **Laravel Socialite**    | You're in Laravel and need social login (redirect → callback → user info) with minimal setup.                                              |
+| **Guzzle + manual**      | You need full control over every aspect of the OAuth2 flow with custom logic at each step, or you're already deep in a Guzzle-based stack. |
