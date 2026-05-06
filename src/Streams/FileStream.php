@@ -10,7 +10,7 @@ use RuntimeException;
  */
 class FileStream extends Stream
 {
-    protected mixed $handle;
+    protected mixed $handle = null;
 
     /**
      * Constructor.
@@ -109,6 +109,11 @@ class FileStream extends Stream
         return false;
     }
 
+    /**
+     * @param string $string
+     * @return int
+     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+     */
     public function write(string $string): int
     {
         throw new RuntimeException('Stream is not writable');
