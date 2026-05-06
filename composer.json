@@ -1,10 +1,19 @@
 {
   "name": "simsoft/http-client",
-  "description": "A simple CURL HTTP Client.",
+  "description": "A fluent, zero-dependency PHP HTTP client with built-in OAuth2, retry, middleware, and streaming — powered by cURL.",
   "keywords": [
-    "CURL",
-    "HTTP Client",
-    "API client"
+    "http-client",
+    "curl",
+    "oauth2",
+    "psr-18",
+    "psr-7",
+    "rest",
+    "api-client",
+    "retry",
+    "middleware",
+    "streaming",
+    "pkce",
+    "fluent-api"
   ],
   "type": "library",
   "license": "MIT",
@@ -21,25 +30,30 @@
     "ext-curl": "*",
     "psr/http-message": "^1.1|^2.0",
     "psr/http-client": "^1.0",
-    "psr/http-factory": "^1.0",
-    "league/oauth2-client": "^2.8"
+    "psr/http-factory": "^1"
   },
   "require-dev": {
     "phpunit/phpunit": "^11",
     "phpmd/phpmd": "^2",
     "phpstan/phpstan": "^1",
-    "squizlabs/php_codesniffer": "^3.7"
+    "squizlabs/php_codesniffer": "^4",
+    "steos/quickcheck": "^2.0"
   },
   "autoload": {
     "psr-4": {
       "Simsoft\\HttpClient\\": "src"
     }
   },
+  "autoload-dev": {
+    "psr-4": {
+      "Simsoft\\HttpClient\\Tests\\": "tests"
+    }
+  },
   "config": {
     "optimize-autoloader": true
   },
   "scripts": {
-    "test": "phpunit --display-deprecations tests",
+    "test": "phpunit --use-baseline baseline.xml tests",
     "qc": [
       "phpstan analyse --memory-limit=512M",
       "phpmd src text phpmd.xml"

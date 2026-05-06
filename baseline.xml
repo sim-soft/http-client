@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<files version="1">
+    <file path="vendor/steos/quickcheck/src/QuickCheck/Property.php">
+        <line number="41" hash="abd492c3ef3d78a521be3047b4253ef3b8d840ab">
+            <issue>
+                <![CDATA[QuickCheck\Property::check(): Implicitly marking parameter $seed as nullable is deprecated, the explicit nullable type must be used instead]]></issue>
+        </line>
+    </file>
+    <file path="vendor/steos/quickcheck/src/QuickCheck/Generator.php">
+        <line number="317" hash="98196c54c90877397fc371dd5a60d88b7781b597">
+            <issue>
+                <![CDATA[QuickCheck\Generator::arraysOf(): Implicitly marking parameter $min as nullable is deprecated, the explicit nullable type must be used instead]]></issue>
+            <issue>
+                <![CDATA[QuickCheck\Generator::arraysOf(): Implicitly marking parameter $max as nullable is deprecated, the explicit nullable type must be used instead]]></issue>
+        </line>
+        <line number="355" hash="628b70ca9780fc0c1e501daa84bfbeed721e4333">
+            <issue>
+                <![CDATA[QuickCheck\Generator::intoArrays(): Implicitly marking parameter $min as nullable is deprecated, the explicit nullable type must be used instead]]></issue>
+            <issue>
+                <![CDATA[QuickCheck\Generator::intoArrays(): Implicitly marking parameter $max as nullable is deprecated, the explicit nullable type must be used instead]]></issue>
+        </line>
+    </file>
+    <file path="vendor/steos/quickcheck/src/QuickCheck/PHPUnit/PropertyConstraint.php">
+        <line number="23" hash="89dca0911af5e125008c36aed6638f71664eb97d">
+            <issue>
+                <![CDATA[QuickCheck\PHPUnit\PropertyConstraint::__construct(): Implicitly marking parameter $seed as nullable is deprecated, the explicit nullable type must be used instead]]></issue>
+        </line>
+        <line number="29" hash="d6f3f4056303965cd6046e9f0c2da8723a9cd931">
+            <issue>
+                <![CDATA[QuickCheck\PHPUnit\PropertyConstraint::check(): Implicitly marking parameter $seed as nullable is deprecated, the explicit nullable type must be used instead]]></issue>
+        </line>
+    </file>
+</files>

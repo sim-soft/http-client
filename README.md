@@ -43,32 +43,61 @@ compatible framework or library.
 
 | Feature                       | **Simsoft HttpClient**             | **Guzzle**                                 | **Symfony HttpClient**            | **Laravel HTTP Client** |
 |-------------------------------|------------------------------------|--------------------------------------------|-----------------------------------|-------------------------|
-| **PHP requirement**           | 8.1+                               | 7.2.5+                                     | 5.4+                              | 8.1+ (framework)        |
+| **PHP requirement**           | 8.1+                               | 7.2.5+                                     | 8.2+                              | 8.2+ (framework)        |
 | **Dependencies**              | `ext-curl` only                    | `psr/http-*`, `psr/log`, optional adapters | None (native PHP streams or curl) | Wraps Guzzle            |
+| **Architecture**              | Single class + traits, direct cURL | Handler stack, middleware, promises        | Contracts + multiple transports   | Facade over Guzzle      |
 | **PSR-18**                    | ✅                                  | ✅                                          | ✅ (adapter)                       | ❌ (Guzzle underneath)   |
 | **PSR-7**                     | ✅ (response)                       | ✅ (full)                                   | ❌ (own contracts)                 | ❌ (own contracts)       |
 | **Transport**                 | cURL directly                      | cURL or stream                             | cURL, stream, amphp               | Guzzle (cURL)           |
-| **HTTP/2**                    | ✅ native                           | ✅ via cURL                                 | ✅ native                          | ✅ via Guzzle            |
+| **HTTP/2**                    | ✅ native                           | ✅ via cURL                                 | ✅ native + multiplexing           | ✅ via Guzzle            |
 | **Fluent API**                | ✅                                  | ❌ (options array)                          | ✅                                 | ✅                       |
 | **Middleware pipeline**       | ✅ named closures                   | ✅ HandlerStack                             | ✅ event listeners                 | ✅ (limited)             |
-| **Retry built-in**            | ✅ + custom callback                | Via middleware                             | ✅                                 | ✅                       |
+| **Retry built-in**            | ✅ + custom callback                | Via middleware                             | ✅ RetryableHttpClient             | ✅                       |
 | **Async / concurrent**        | ❌                                  | ✅ promises                                 | ✅ native                          | ✅ via Guzzle            |
 | **Streaming upload**          | ✅ StreamInterface                  | ✅                                          | ✅                                 | ✅                       |
-| **Streaming download**        | ✅ sink / CURLOPT_FILE              | ✅                                          | ✅                                 | ✅                       |
+| **Streaming download**        | ✅ sink / sinkStream                | ✅                                          | ✅                                 | ✅                       |
 | **File attachments**          | ✅ CURLFile, path, resource, string | ✅                                          | ✅                                 | ✅                       |
+| **Response dot-notation**     | ✅ + wildcards                      | ❌                                          | ❌                                 | ❌                       |
 | **Request mocking / testing** | ❌ built-in                         | ✅ MockHandler                              | ✅ MockHttpClient                  | ✅ Http::fake()          |
+| **Connection pooling**        | ❌                                  | ✅                                          | ✅                                 | ✅ via Guzzle            |
 | **Standalone**                | ✅                                  | ✅                                          | ✅                                 | ❌ requires Laravel      |
+| **Install size**              | ⭐ Tiny                             | Medium                                     | Medium                            | Large (framework)       |
 | **Memory footprint**          | ⭐ Minimal                          | Moderate                                   | Low                               | Moderate + framework    |
 | **Learning curve**            | Low                                | Medium                                     | Medium                            | Low (Laravel only)      |
 
-### When to choose Simsoft HttpClient
+### Key differentiators
 
-- You want **full cURL control** — buffer sizes, DNS timeouts, resume downloads,
-  HTTP/2 — without routing through abstraction layers.
-- You are building a **standalone microservice, CLI tool, or library** that must
-  not pull in a framework.
-- You need **PSR-18 interoperability** with a minimal dependency footprint.
-- You want a **readable fluent API** without Guzzle's options-array style.
+- **Simpler mental model** — One class, trait composition, no handler stacks or
+  DI containers. You chain methods and call `get()`/`post()`. No factory setup
+  needed.
+- **Zero-dependency core** — Only requires ext-curl. Guzzle pulls in 5+
+  packages;
+  Symfony needs its contracts package; Laravel needs the full framework.
+- **Dot-notation response access** — `$response->data('data.users.*.name')` with
+  wildcard support. Other clients require manual array traversal or separate
+  packages.
+- **Direct cURL control** — Every cURL option is accessible without abstraction
+  layers. Buffer sizes, DNS cache, download resumption, and HTTP/2 are all
+  first-class.
+
+### Trade-offs
+
+- No async/concurrent requests (Guzzle and Symfony both support this)
+- No HTTP/2 multiplexing (Symfony excels here)
+- No pluggable transports (locked to cURL; Symfony can use native PHP streams,
+  amphp, etc.)
+- No built-in request mocking (Guzzle, Symfony, and Laravel all provide test
+  doubles)
+- No connection pooling or persistent connection management
+
+### When to choose each
+
+| Choose                 | When                                                                                                                                                   |
+|------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Simsoft HttpClient** | Standalone microservices, CLI tools, or libraries where you want minimal dependencies, full cURL control, and a fluent API without framework overhead. |
+| **Guzzle**             | You need async, broad ecosystem support, or are already in a Guzzle-dependent stack.                                                                   |
+| **Symfony HttpClient** | You need HTTP/2 multiplexing, async, multiple transport backends, or are in a Symfony project.                                                         |
+| **Laravel HTTP**       | You're in Laravel and want the framework's testing fakes and collection integration.                                                                   |
 
 ## Usage Guide
 1. [Installation](#installation)
@@ -83,13 +112,14 @@ compatible framework or library.
 10. [Retry Failed Request](#retry)
 11. [Logging](#logging)
 12. [Middleware Usage](#middleware)
-13. [Response Handling](#response_handling)
+13. [Response Handling With Dot-notation](#response_handling)
 14. [Response Body](#response_body)
 15. [Create Custom SDK](docs/CUSTOM_SDK.md)
     1. [Create SDK Client](docs/CUSTOM_SDK.md)
     2. [Create SDK Response](docs/CUSTOM_SDK.md)
-16. [PSR-18 Usage](docs/PSR18.md)
-17. [Macro](docs/MACRO.md)
+16. [OAuth2 Authentication](docs/OAUTH2.md)
+17. [PSR-18 Usage](docs/PSR18.md)
+18. [Macro](docs/MACRO.md)
 
 ## Install<a id="installation"></a>
 
@@ -137,8 +167,9 @@ $client = new HttpClient();
 $client->withBaseUrl('https://api.domain.com/api');
 
 $response = $client->get('/resource'); // Perform GET request.
-$response = $client->get('/resource', ['foo' => 'bar', 'foo1' => 'bar2']); // Perform GET request with query params. ?foo=bar&foo1=bar2
+$response = $client->get('/resource', ['foo' => 'bar', 'foo1' => 'bar2']); // GET with query params: ?foo=bar&foo1=bar2
 
+$response = $client->put('/resource', ['id' => 1, 'name' => 'updated']); // Perform PUT request.
 $response = $client->patch('/resource', ['id' => 1]); // Perform PATCH request.
 $response = $client->delete('/resource', ['id' => 2]); // Perform DELETE request.
 ```
@@ -220,6 +251,10 @@ $response = HttpClient::make()
 
     ->withBearerToken('YOUR_TOKEN') // set header Bearer YOUR_TOKEN
 
+    ->timeout(30) // Request timeout in seconds (CURLOPT_TIMEOUT).
+
+    ->connectionTimeout(5) // Connection timeout in seconds (CURLOPT_CONNECTTIMEOUT).
+
     ->withoutVerifying() // Disable TLS certificates verify.
 
     ->withoutReturnTransfer() // Disable return transfer.
@@ -300,7 +335,7 @@ $response = $client->attach('attachments', [
 
 ## Download File<a id="download"></a>
 
-Download a file to disk.
+Download a file to disk (uses `CURLOPT_FILE` internally).
 
 ```php
 use Simsoft\HttpClient\HttpClient;
@@ -310,7 +345,7 @@ HttpClient::make()
     ->get('https://example.com/file.zip');
 ```
 
-Stream download to a file handle.
+Stream download to a file handle (uses `CURLOPT_WRITEFUNCTION` internally).
 
 ```php
 use Simsoft\HttpClient\HttpClient;
@@ -318,12 +353,17 @@ use Simsoft\HttpClient\HttpClient;
 $fp = fopen('php://output', 'wb');
 // or $fp = fopen('path/to/file.zip', 'wb');
 HttpClient::make()
-    ->sink($fp, streamOnly: true)
+    ->sinkStream($fp)
     ->get('https://example.com/file.zip');
 fclose($fp);
 ```
 
+Both methods accept a file path (string) or an open resource handle.
+
 ## Retry Failed Request<a id="retry"></a>
+
+> Imports (`use Simsoft\HttpClient\HttpClient`) are omitted in the examples
+> below for brevity.
 
 ```php
 use Simsoft\HttpClient\HttpClient;
@@ -429,21 +469,21 @@ use Simsoft\HttpClient\Response;
 $client = HttpClient::make()
     ->withBaseUrl('https://api.example.com')
 
-     // withMiddleware(Closure, middleware_name) middleware_name is optional
-     // middleware function is expecting 2 arguments. 1st is the request object, 2nd is the next middleware function.
-     // Middleware function should return a response object.
-    ->withMiddleware(function (HttpClient $request,Closure $next): Response {
-        // do something with the request
+     // withMiddleware(Closure, middleware_name) middleware_name is optional.
+     // The closure receives 2 arguments: the request object and the next middleware.
+     // It must return a Response instance.
+    ->withMiddleware(function (HttpClient $request, Closure $next): Response {
+        // Modify the request before it is sent
         $request->withHeader('X-Custom-Header', 'Custom Value');
 
         $response = $next();
-        // do something with the response
+        // Inspect or modify the response after it is received
         return $response;
-    })
+    }, 'my-middleware')
     ->get('/users');
 ```
 
-## Response Handling<a id="response_handling"></a>
+## Response Handling With Dot-notation<a id="response_handling"></a>
 
 ```php
 use Simsoft\HttpClient\HttpClient;
@@ -483,7 +523,7 @@ if ($response->ok()) {  // Or $response->successful() for 2xx status codes.
     echo $data['data'][0]['name'] . PHP_EOL;
     echo $data['data'][1]['name'] . PHP_EOL;
 
-    // Support dot notation.
+    // Support Dot-notation
     echo $response->data('status') . PHP_EOL;       // 200
     echo $response->data('data.0.name') . PHP_EOL;  // 'John Doe'
     echo $response->data('data.1.name') . PHP_EOL;  // 'Jane Doe'

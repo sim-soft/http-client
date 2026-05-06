@@ -48,13 +48,12 @@ abstract class SimpleOAuth2 extends HttpClient
      * @param string $clientSecret OAuth2 client secret.
      * @param StorageInterface|null $storage Custom storage. Defaults to SessionStorage.
      */
-    public function __construct(
+    final public function __construct(
         protected string  $clientId,
         protected string  $clientSecret,
         ?StorageInterface $storage = null,
     )
     {
-        parent::__construct();
         $this->storage = $storage ?? new SessionStorage($this->tokenStorageName);
     }
 

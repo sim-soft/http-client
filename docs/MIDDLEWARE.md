@@ -3,6 +3,10 @@
 Passing middleware to the client is done by calling `withMiddleware` on the
 client.
 
+> **Note:** The examples below omit `use` imports for brevity. All middleware
+> closures require `use Closure` and `use Simsoft\HttpClient\Response` at
+> minimum. The first example shows the full imports.
+
 ```php
 use Closure;
 use Simsoft\HttpClient\HttpClient;
@@ -11,17 +15,17 @@ use Simsoft\HttpClient\Response;
 $client = HttpClient::make()
     ->withBaseUrl('https://api.example.com')
 
-     // withMiddleware(Closure, middleware_name) middleware_name is optional
-     // middleware function is expecting 2 arguments. 1st is the request object, 2nd is the next middleware function.
-     // Middleware function should return a response object.
-    ->withMiddleware(function (HttpClient $request,Closure $next): Response {
-        // do something with the request
+     // withMiddleware(Closure, middleware_name) middleware_name is optional.
+     // The closure receives 2 arguments: the request object and the next middleware.
+     // It must return a Response instance.
+    ->withMiddleware(function (HttpClient $request, Closure $next): Response {
+        // Modify the request before it is sent
         $request->withHeader('X-Custom-Header', 'Custom Value');
 
         $response = $next();
-        // do something with the response
+        // Inspect or modify the response after it is received
         return $response;
-    })
+    }, 'my-middleware')
     ->get('/users');
 ```
 
@@ -94,7 +98,8 @@ $client = HttpClient::make()
 #### Example 4: Caching — return cached response, skip real request.
 
 ```php
-$cache = new Psr\SimpleCache\CacheInterface(); // your PSR-16 cache
+// $cache is your PSR-16 (SimpleCache) implementation — e.g. Symfony Cache, Laravel Cache, etc.
+/** @var \Psr\SimpleCache\CacheInterface $cache */
 
 $client = HttpClient::make()
     ->withBaseUrl('https://api.example.com')

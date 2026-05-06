@@ -166,15 +166,11 @@ class StringStream extends Stream
             $this->content .= str_repeat("\0", $this->position - $this->contentLength);
         }
 
-        if ($this->position === $this->contentLength) {
-            // fast path append
-            $this->content .= $string;
-        } else {
-            $this->content =
-                substr($this->content, 0, $this->position)
+        $this->content = $this->position === $this->contentLength
+            ? $this->content . $string
+            : substr($this->content, 0, $this->position)
                 . $string
                 . substr($this->content, $this->position + $length);
-        }
 
         $this->position += $length;
         $this->contentLength = strlen($this->content);
