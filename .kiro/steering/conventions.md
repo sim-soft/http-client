@@ -43,6 +43,13 @@
 - No boolean argument flags (except whitelisted methods: `__construct`, `parse`,
   `formal`, `make`, `lookup`)
 - No unused code (private fields, methods, variables, parameters)
+- No dead code — never add parameters, variables, imports, or methods "for
+  future use." Every line must serve a current purpose. If it's not used, remove
+  it. Do not use `@SuppressWarnings(PHPMD.UnusedFormalParameter)` to hide dead
+  parameters — restructure the code instead.
+- No unnecessary pass-by-reference — only use `&` when the function actually
+  modifies the array/variable. Read-only access must use pass-by-value. If in
+  doubt, pass by value; refactor to reference only when mutation is required.
 
 ## Model/Data Encapsulation
 

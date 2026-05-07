@@ -7,6 +7,8 @@ use CurlHandle;
 use Exception;
 use InvalidArgumentException;
 use Psr\Http\Client\ClientInterface;
+use Psr\Http\Client\NetworkExceptionInterface;
+use Psr\Http\Client\RequestExceptionInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamInterface;
@@ -391,8 +393,8 @@ class HttpClient implements ClientInterface
     /**
      * PSR-18: Send a PSR-7 request object.
      *
-     * @throws \Psr\Http\Client\NetworkExceptionInterface
-     * @throws \Psr\Http\Client\RequestExceptionInterface
+     * @throws NetworkExceptionInterface
+     * @throws RequestExceptionInterface
      */
     public function sendRequest(RequestInterface $request): ResponseInterface
     {
@@ -532,6 +534,20 @@ class HttpClient implements ClientInterface
         } finally {
             $this->flush();
         }
+    }
+
+    /**
+     * Build a prepared cURL handle for external execution (used by HttpPool).
+     *
+     * This method prepares the handle with all configured options but does NOT
+     * execute it. The caller is responsible for execution and cleanup.
+     *
+     * @return CurlHandle The prepared handle ready for curl_multi_add_handle().
+     */
+    public function buildHandle(): CurlHandle
+    {
+        $requestId = uniqid('httpclient_req_', true);
+        return $this->prepareHandle($requestId);
     }
 
     /**
