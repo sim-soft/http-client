@@ -17,6 +17,16 @@ trait CurlOptionsTrait
     /** @var CurlHandle|null Reusable cURL handle. */
     protected ?CurlHandle $curlHandle = null;
 
+    /**
+     * Reset the cURL handle on clone to prevent shared handle corruption.
+     *
+     * @return void
+     */
+    public function __clone(): void
+    {
+        $this->curlHandle = null;
+    }
+
     /** @var int Buffer size in bytes. Default: 8192. */
     protected int $bufferSize = 8192;
 

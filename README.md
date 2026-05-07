@@ -38,6 +38,12 @@ compatible framework or library.
   both the request and response, enabling auth injection, caching, circuit
   breaking,
   and error normalization without touching core logic.
+- **Concurrent request execution** — `HttpPool` sends batches of requests via
+  `curl_multi_*` with a configurable sliding window, automatic HTTP/2
+  multiplexing, and per-response callbacks.
+- **Built-in test double** — `FakeHttpClient` provides request mocking, wildcard
+  pattern matching, response sequencing, and PHPUnit assertion methods — no
+  external mocking libraries needed.
 
 ## Comparison<a id="comparison"></a>
 
@@ -49,17 +55,17 @@ compatible framework or library.
 | **PSR-18**                    | ✅                                  | ✅                                          | ✅ (adapter)                       | ❌ (Guzzle underneath)   |
 | **PSR-7**                     | ✅ (response)                       | ✅ (full)                                   | ❌ (own contracts)                 | ❌ (own contracts)       |
 | **Transport**                 | cURL directly                      | cURL or stream                             | cURL, stream, amphp               | Guzzle (cURL)           |
-| **HTTP/2**                    | ✅ native                           | ✅ via cURL                                 | ✅ native + multiplexing           | ✅ via Guzzle            |
+| **HTTP/2**                    | ✅ native + multiplexing (HttpPool) | ✅ via cURL                                 | ✅ native + multiplexing           | ✅ via Guzzle            |
 | **Fluent API**                | ✅                                  | ❌ (options array)                          | ✅                                 | ✅                       |
 | **Middleware pipeline**       | ✅ named closures                   | ✅ HandlerStack                             | ✅ event listeners                 | ✅ (limited)             |
 | **Retry built-in**            | ✅ + custom callback                | Via middleware                             | ✅ RetryableHttpClient             | ✅                       |
-| **Async / concurrent**        | ❌                                  | ✅ promises                                 | ✅ native                          | ✅ via Guzzle            |
+| **Async / concurrent**        | ✅ HttpPool (curl_multi)            | ✅ promises                                 | ✅ native                          | ✅ via Guzzle            |
 | **Streaming upload**          | ✅ StreamInterface                  | ✅                                          | ✅                                 | ✅                       |
 | **Streaming download**        | ✅ sink / sinkStream                | ✅                                          | ✅                                 | ✅                       |
 | **File attachments**          | ✅ CURLFile, path, resource, string | ✅                                          | ✅                                 | ✅                       |
 | **Response dot-notation**     | ✅ + wildcards                      | ❌                                          | ❌                                 | ❌                       |
-| **Request mocking / testing** | ❌ built-in                         | ✅ MockHandler                              | ✅ MockHttpClient                  | ✅ Http::fake()          |
-| **Connection pooling**        | ❌                                  | ✅                                          | ✅                                 | ✅ via Guzzle            |
+| **Request mocking / testing** | ✅ FakeHttpClient                   | ✅ MockHandler                              | ✅ MockHttpClient                  | ✅ Http::fake()          |
+| **Connection pooling**        | ✅ automatic handle reuse           | ✅                                          | ✅                                 | ✅ via Guzzle            |
 | **Standalone**                | ✅                                  | ✅                                          | ✅                                 | ❌ requires Laravel      |
 | **Install size**              | ⭐ Tiny                             | Medium                                     | Medium                            | Large (framework)       |
 | **Memory footprint**          | ⭐ Minimal                          | Moderate                                   | Low                               | Moderate + framework    |
@@ -69,6 +75,7 @@ compatible framework or library.
 
 - **Simpler mental model** — One class, trait composition, no handler stacks or
   DI containers. You chain methods and call `get()`/`post()`. No factory setup
+  is
   needed.
 - **Zero-dependency core** — Only requires ext-curl. Guzzle pulls in 5+
   packages;
@@ -79,25 +86,34 @@ compatible framework or library.
 - **Direct cURL control** — Every cURL option is accessible without abstraction
   layers. Buffer sizes, DNS cache, download resumption, and HTTP/2 are all
   first-class.
+- **Concurrent requests without promises** — `HttpPool::create()` gives you
+  concurrent execution via `curl_multi_*` with a sliding window, HTTP/2
+  multiplexing, and per-response callbacks — no promise chains or event loops.
+- **Built-in test double** — `FakeHttpClient` provides request mocking, pattern
+  matching, response sequencing, and PHPUnit assertions without extra packages.
 
 ### Trade-offs
 
-- No async/concurrent requests (Guzzle and Symfony both support this)
-- No HTTP/2 multiplexing (Symfony excels here)
-- No pluggable transports (locked to cURL; Symfony can use native PHP streams,
-  amphp, etc.)
-- No built-in request mocking (Guzzle, Symfony, and Laravel all provide test
-  doubles)
-- No connection pooling or persistent connection management
+- **No pluggable transports** — locked to cURL. This is intentional: cURL is
+  available everywhere PHP runs, and single transport means zero adapter
+  complexity, predictable behavior, and direct access to every cURL option.
+  Adding stream or amphp backends would introduce abstraction layers that
+  contradict the library's "direct and auditable" philosophy.
+- **No promise-based async** — concurrent requests use `curl_multi` polling, not
+  promises. In PHP's short-lived request lifecycle, promises are syntactic sugar
+  over the same `curl_multi_exec` loop. They add object allocations, callback
+  chains, and event loop concepts without providing true non-blocking I/O.
+  `HttpPool::create()->send($requests)` is more explicit about what actually
+  happens.
 
 ### When to choose each
 
-| Choose                 | When                                                                                                                                                   |
-|------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Simsoft HttpClient** | Standalone microservices, CLI tools, or libraries where you want minimal dependencies, full cURL control, and a fluent API without framework overhead. |
-| **Guzzle**             | You need async, broad ecosystem support, or are already in a Guzzle-dependent stack.                                                                   |
-| **Symfony HttpClient** | You need HTTP/2 multiplexing, async, multiple transport backends, or are in a Symfony project.                                                         |
-| **Laravel HTTP**       | You're in Laravel and want the framework's testing fakes and collection integration.                                                                   |
+| Choose                 | When                                                                                                                                                                                          |
+|------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Simsoft HttpClient** | Standalone microservices, CLI tools, or libraries where you want minimal dependencies, full cURL control, concurrent requests, built-in testing, and a fluent API without framework overhead. |
+| **Guzzle**             | You need promise-based async, broad ecosystem support, or are already in a Guzzle-dependent stack.                                                                                            |
+| **Symfony HttpClient** | You need multiple transport backends (amphp, native streams), or are in a Symfony project.                                                                                                    |
+| **Laravel HTTP**       | You're in Laravel and want the framework's testing fakes and collection integration.                                                                                                          |
 
 ## Usage Guide
 1. [Installation](#installation)
@@ -120,6 +136,8 @@ compatible framework or library.
 16. [OAuth2 Authentication](docs/OAUTH2.md)
 17. [PSR-18 Usage](docs/PSR18.md)
 18. [Macro](docs/MACRO.md)
+19. [Concurrent Requests (HttpPool)](docs/POOL.md)
+20. [Testing with FakeHttpClient](docs/TESTING.md)
 
 ## Install<a id="installation"></a>
 
@@ -167,7 +185,7 @@ $client = new HttpClient();
 $client->withBaseUrl('https://api.domain.com/api');
 
 $response = $client->get('/resource'); // Perform GET request.
-$response = $client->get('/resource', ['foo' => 'bar', 'foo1' => 'bar2']); // GET with query params: ?foo=bar&foo1=bar2
+$response = $client->get('/resource', ['foo' => 'bar', 'foo1' => 'bar2']); // GET with query params:foo=bar&foo1=bar2
 
 $response = $client->put('/resource', ['id' => 1, 'name' => 'updated']); // Perform PUT request.
 $response = $client->patch('/resource', ['id' => 1]); // Perform PATCH request.

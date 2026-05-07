@@ -57,3 +57,9 @@ Thumbs.db
 nbproject/
 
 *.icloud
+
+# Example .gitignore strategy
+.kiro/
+!.kiro/context/
+!.kiro/config/
+.kiro/logs/

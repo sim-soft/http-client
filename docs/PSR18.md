@@ -20,7 +20,6 @@ use Nyholm\Psr7\Factory\Psr17Factory;
 use Simsoft\HttpClient\HttpClient;
 
 $factory = new Psr17Factory();
-$client  = new HttpClient(requestFactory: $factory);
 
 // Build a PSR-7 request using the factory
 $psrRequest = $factory->createRequest('GET', 'https://api.example.com/users')
@@ -28,7 +27,7 @@ $psrRequest = $factory->createRequest('GET', 'https://api.example.com/users')
     ->withHeader('Authorization', 'Bearer YOUR_TOKEN');
 
 // Send via PSR-18
-$response = $client->sendRequest($psrRequest);
+$response = HttpClient::make()->sendRequest($psrRequest);
 
 echo $response->getStatusCode();           // 200
 echo $response->getBody()->getContents();  // raw JSON body
@@ -41,8 +40,6 @@ use Nyholm\Psr7\Factory\Psr17Factory;
 use Simsoft\HttpClient\HttpClient;
 
 $factory = new Psr17Factory();
-$client  = new HttpClient(requestFactory: $factory);
-
 $body    = $factory->createStream(json_encode(['name' => 'John']));
 
 $psrRequest = $factory->createRequest('POST', 'https://api.example.com/users')
@@ -50,7 +47,7 @@ $psrRequest = $factory->createRequest('POST', 'https://api.example.com/users')
     ->withHeader('Accept', 'application/json')
     ->withBody($body);
 
-$response = $client->sendRequest($psrRequest);
+$response = HttpClient::make()->sendRequest($psrRequest);
 ```
 
 ### Injecting into a PSR-18-dependent SDK
@@ -60,16 +57,16 @@ Many third-party SDKs accept any `ClientInterface` implementation:
 ```php
 use Simsoft\HttpClient\HttpClient;
 
-// e.g. an OpenAI, Stripe, or any other PSR-18-compatible SDK client
+// e.g., an OpenAI, Stripe, or any other PSR-18-compatible SDK client
 $sdk = new SomeApiSdk(
-    httpClient: new HttpClient(),
+    httpClient: HttpClient::make(),
     // ...
 );
 ```
 
 ### PSR-18 exception handling
 
-PSR-18 does **not** throw exceptions for HTTP-level errors (4xx, 5xx).
+PSR-18 it does **not** throw exceptions for HTTP-level errors (4xx, 5xx).
 Those are returned as normal `ResponseInterface` objects.
 Only network-level failures throw:
 
@@ -100,7 +97,7 @@ try {
 Both APIs share the same underlying client instance. You can use them together:
 
 ```php
-$client = new HttpClient(requestFactory: $factory);
+$client = HttpClient::make();
 
 // Fluent API — for your own code
 $response = $client

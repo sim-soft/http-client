@@ -17,7 +17,7 @@ trait PrepareHandleTrait
      * @param string $requestId Unique ID for this request.
      * @return CurlHandle
      */
-    private function prepareHandle(string $requestId): CurlHandle
+    protected function prepareHandle(string $requestId): CurlHandle
     {
         $this->prepareUrl();
         $this->prepareMethodOptions();
