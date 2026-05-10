@@ -8,7 +8,7 @@ namespace Simsoft\HttpClient\Interfaces;
 interface StorageInterface
 {
     /**
-     * Determine storage has key.
+     * Determine storage has a key.
      *
      * @param string $key
      * @return bool
@@ -16,7 +16,7 @@ interface StorageInterface
     public function has(string $key): bool;
 
     /**
-     * Set storage value with key.
+     * Set storage value with a key.
      *
      * @param string $key
      * @param mixed $value

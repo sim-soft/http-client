@@ -98,7 +98,7 @@ class Response implements ResponseInterface
     }
 
     /**
-     * Parse the HTTP status line to extract protocol version and reason phrase.
+     * Parse the HTTP status line to extract the protocol version and reason phrase.
      *
      * @param string $line
      * @return void
@@ -369,7 +369,7 @@ class Response implements ResponseInterface
     }
 
     /**
-     * Decode the response body as JSON and return associative array.
+     * Decode the response body as JSON and return an associative array.
      *
      * @return mixed
      */
@@ -379,7 +379,7 @@ class Response implements ResponseInterface
     }
 
     /**
-     * Decode the response body as JSON and return stdClass object.
+     * Decode the response body as JSON and return the stdClass object.
      *
      * @return object|null
      */
@@ -495,7 +495,7 @@ class Response implements ResponseInterface
     }
 
     /**
-     * Get a response attribute by dot-notation key.
+     * Get a response attribute by the dot-notation key.
      *
      * @param string $key
      * @param mixed|null $default

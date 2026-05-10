@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Simsoft\HttpClient\Tests;
 
-use Closure;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -480,5 +479,276 @@ class HttpPoolTest extends TestCase
         // If the pool completes without error, it means the multi handle
         // was properly initialized, used, and closed for all requests
         $this->assertSame(5, $result->count());
+    }
+
+    // ── Timeout tests ────────────────────────────────────────────────
+
+    /**
+     * Test that timeout method returns self for fluent chaining.
+     */
+    #[Test]
+    public function timeoutReturnsSelfForChaining(): void
+    {
+        $pool = new HttpPool();
+        $result = $pool->timeout(10);
+
+        $this->assertSame($pool, $result);
+    }
+
+    /**
+     * Test that negative timeout throws InvalidArgumentException.
+     */
+    #[Test]
+    public function negativeTimeoutThrowsInvalidArgumentException(): void
+    {
+        $pool = new HttpPool();
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $pool->timeout(-1);
+    }
+
+    /**
+     * Test that timeout of zero is accepted (disables timeout).
+     */
+    #[Test]
+    public function zeroTimeoutIsAccepted(): void
+    {
+        $pool = new HttpPool();
+        $pool->timeout(0);
+
+        $reflection = new \ReflectionProperty($pool, 'timeout');
+        $this->assertSame(0, $reflection->getValue($pool));
+    }
+
+    // ── Retries tests ────────────────────────────────────────────────
+
+    /**
+     * Test that retries method returns self for fluent chaining.
+     */
+    #[Test]
+    public function retriesReturnsSelfForChaining(): void
+    {
+        $pool = new HttpPool();
+        $result = $pool->retries(3);
+
+        $this->assertSame($pool, $result);
+    }
+
+    /**
+     * Test that negative retries throws InvalidArgumentException.
+     */
+    #[Test]
+    public function negativeRetriesThrowsInvalidArgumentException(): void
+    {
+        $pool = new HttpPool();
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $pool->retries(-1);
+    }
+
+    /**
+     * Test that negative retry delay throws InvalidArgumentException.
+     */
+    #[Test]
+    public function negativeRetryDelayThrowsInvalidArgumentException(): void
+    {
+        $pool = new HttpPool();
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $pool->retries(3, after: -100);
+    }
+
+    /**
+     * Test that retries with delay stores both values.
+     */
+    #[Test]
+    public function retriesWithDelayStoresBothValues(): void
+    {
+        $pool = new HttpPool();
+        $pool->retries(2, after: 500);
+
+        $retriesRef = new \ReflectionProperty($pool, 'retries');
+        $delayRef = new \ReflectionProperty($pool, 'retryDelayMs');
+
+        $this->assertSame(2, $retriesRef->getValue($pool));
+        $this->assertSame(500, $delayRef->getValue($pool));
+    }
+
+    /**
+     * Test that failed requests are retried with FakeHttpClient.
+     */
+    #[Test]
+    public function retriesFailedRequestsWithFakeClient(): void
+    {
+        $client = FakeHttpClient::fake([]);
+        $client->sequence('GET *', [500, 500, 200]);
+        $client->withBaseUrl('https://api.example.com')
+            ->resource('/flaky');
+
+        $pool = new HttpPool();
+        $pool->retries(3);
+        $result = $pool->send([$client]);
+
+        $this->assertSame(200, $result[0]->getStatusCode());
+    }
+
+    // ── Delay (rate limiting) tests ──────────────────────────────────
+
+    /**
+     * Test that delay method returns self for fluent chaining.
+     */
+    #[Test]
+    public function delayReturnsSelfForChaining(): void
+    {
+        $pool = new HttpPool();
+        $result = $pool->delay(100);
+
+        $this->assertSame($pool, $result);
+    }
+
+    /**
+     * Test that negative delay throws InvalidArgumentException.
+     */
+    #[Test]
+    public function negativeDelayThrowsInvalidArgumentException(): void
+    {
+        $pool = new HttpPool();
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $pool->delay(-1);
+    }
+
+    // ── onProgress callback tests ────────────────────────────────────
+
+    /**
+     * Test that onProgress returns self for fluent chaining.
+     */
+    #[Test]
+    public function onProgressReturnsSelfForChaining(): void
+    {
+        $pool = new HttpPool();
+        $result = $pool->onProgress(function (int $completed, int $total): void {
+        });
+
+        $this->assertSame($pool, $result);
+    }
+
+    /**
+     * Test that onProgress callback is invoked with correct counts.
+     */
+    #[Test]
+    public function onProgressCallbackReceivesCorrectCounts(): void
+    {
+        $progressLog = [];
+
+        $requests = [];
+        for ($idx = 0; $idx < 3; $idx++) {
+            $url = "https://api.example.com/progress/{$idx}";
+            $client = FakeHttpClient::fake(["GET {$url}" => 200]);
+            $client->withBaseUrl('https://api.example.com')
+                ->resource("/progress/{$idx}")
+                ->withMethod('GET');
+            $requests[] = $client;
+        }
+
+        $pool = new HttpPool();
+        $pool->onProgress(function (int $completed, int $total) use (&$progressLog): void {
+            $progressLog[] = [$completed, $total];
+        });
+
+        $pool->send($requests);
+
+        $this->assertSame([[1, 3], [2, 3], [3, 3]], $progressLog);
+    }
+
+    // ── Named requests tests ─────────────────────────────────────────
+
+    /**
+     * Test that string-keyed requests preserve keys in result.
+     */
+    #[Test]
+    public function namedRequestsPreserveKeysInResult(): void
+    {
+        $usersClient = FakeHttpClient::fake(['GET https://api.example.com/users' => 200]);
+        $usersClient->withBaseUrl('https://api.example.com')
+            ->resource('/users')
+            ->withMethod('GET');
+
+        $postsClient = FakeHttpClient::fake(['GET https://api.example.com/posts' => 201]);
+        $postsClient->withBaseUrl('https://api.example.com')
+            ->resource('/posts')
+            ->withMethod('GET');
+
+        $pool = new HttpPool();
+        $result = $pool->send([
+            'users' => $usersClient,
+            'posts' => $postsClient,
+        ]);
+
+        $this->assertSame(200, $result['users']->getStatusCode());
+        $this->assertSame(201, $result['posts']->getStatusCode());
+    }
+
+    /**
+     * Test that named requests work with onResponse callback.
+     */
+    #[Test]
+    public function namedRequestsPassKeyToCallbacks(): void
+    {
+        $callbackKeys = [];
+
+        $client = FakeHttpClient::fake(['GET https://api.example.com/data' => 200]);
+        $client->withBaseUrl('https://api.example.com')
+            ->resource('/data')
+            ->withMethod('GET');
+
+        $pool = new HttpPool();
+        $pool->onResponse(function (Response $response, int|string $key) use (&$callbackKeys): void {
+            $callbackKeys[] = $key;
+        });
+
+        $pool->send(['myRequest' => $client]);
+
+        $this->assertSame(['myRequest'], $callbackKeys);
+    }
+
+    // ── HttpPool::run() tests ────────────────────────────────────────
+
+    /**
+     * Test that HttpPool::run() executes with PoolBuilder.
+     */
+    #[Test]
+    public function runExecutesWithPoolBuilder(): void
+    {
+        $result = HttpPool::run(function (\Simsoft\HttpClient\PoolBuilder $pool) {
+            $pool->withBaseUrl('https://api.example.com');
+
+            return [
+                'users' => $pool->get('/users'),
+            ];
+        });
+
+        // PoolBuilder creates real HttpClient instances, which would need
+        // real network. Since we can't fake inside run(), just verify it
+        // returns an HttpPoolResult (the request will fail without network)
+        $this->assertInstanceOf(HttpPoolResult::class, $result);
+    }
+
+    // ── Static create() tests ────────────────────────────────────────
+
+    /**
+     * Test that HttpPool::create() returns a configured instance.
+     */
+    #[Test]
+    public function createReturnsConfiguredInstance(): void
+    {
+        $pool = HttpPool::create(5);
+
+        $reflection = new \ReflectionProperty($pool, 'concurrency');
+        $this->assertSame(5, $reflection->getValue($pool));
     }
 }

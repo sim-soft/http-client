@@ -2,18 +2,21 @@
 
 namespace Simsoft\HttpClient\Clients;
 
+use Exception;
 use RuntimeException;
 use Simsoft\HttpClient\Clients\Helpers\FileStorage;
 use Simsoft\HttpClient\Clients\Responses\OAuth2TokenResponse;
 use Simsoft\HttpClient\HttpClient;
 use Simsoft\HttpClient\Interfaces\StorageInterface;
 use Throwable;
+use function error_log;
+use function sprintf;
 
 /**
  * OAuth2 class.
  *
  * Handles OAuth2 token acquisition, caching, and refresh using the library's own
- * HttpClient infrastructure. No external OAuth2 packages required.
+ * HttpClient infrastructure. No external OAuth2 packages are required.
  *
  * Defaults to the client_credentials grant type, which is the most common
  * server-to-server flow.
@@ -131,7 +134,7 @@ abstract class OAuth2
         try {
             return $this->resolveToken();
         } catch (Throwable $throwable) {
-            \error_log(\sprintf(
+            error_log(sprintf(
                 '[OAuth2] Failed to get access token for client "%s": %s',
                 $this->clientId,
                 $throwable->getMessage()
@@ -146,6 +149,7 @@ abstract class OAuth2
      *
      * @return string
      * @throws RuntimeException When token acquisition fails.
+     * @throws Throwable
      */
     private function resolveToken(): string
     {
@@ -163,6 +167,7 @@ abstract class OAuth2
      *
      * @return string The valid access token string.
      * @throws RuntimeException When token acquisition fails.
+     * @throws Throwable
      */
     private function handleCachedToken(): string
     {
@@ -184,6 +189,7 @@ abstract class OAuth2
      * @param TokenData $token The expired token.
      * @return TokenData A fresh token.
      * @throws RuntimeException When token acquisition fails.
+     * @throws Throwable
      */
     private function handleExpiredToken(TokenData $token): TokenData
     {
@@ -200,13 +206,14 @@ abstract class OAuth2
      * @param TokenData $token The expired token with a refresh token.
      * @return TokenData A fresh token.
      * @throws RuntimeException When both refresh and fresh acquisition fail.
+     * @throws Throwable
      */
     private function attemptRefreshWithFallback(TokenData $token): TokenData
     {
         try {
             return $this->refreshToken($token);
         } catch (Throwable $throwable) {
-            \error_log(\sprintf(
+            error_log(sprintf(
                 '[OAuth2] Refresh failed for client "%s": %s — attempting fresh token',
                 $this->clientId,
                 $throwable->getMessage()
@@ -220,7 +227,7 @@ abstract class OAuth2
      * Fetch a fresh access token using the configured grant type.
      *
      * @return TokenData
-     * @throws RuntimeException When the token endpoint returns a non-successful response.
+     * @throws RuntimeException|Throwable When the token endpoint returns a non-successful response.
      */
     protected function fetchNewToken(): TokenData
     {
@@ -237,7 +244,7 @@ abstract class OAuth2
         $response = $this->buildTokenRequest($params);
 
         if (!$response->successful()) {
-            throw new RuntimeException(\sprintf(
+            throw new RuntimeException(sprintf(
                 'Token request failed [HTTP %d]: %s',
                 $response->getStatusCode(),
                 $response->getMessage() ?? 'Unknown error'
@@ -253,6 +260,7 @@ abstract class OAuth2
      * @param TokenData $token The expired token with a refresh token.
      * @return TokenData
      * @throws RuntimeException When the refresh request fails.
+     * @throws Throwable
      */
     protected function refreshToken(TokenData $token): TokenData
     {
@@ -266,7 +274,7 @@ abstract class OAuth2
         $response = $this->buildTokenRequest($params);
 
         if (!$response->successful()) {
-            throw new RuntimeException(\sprintf(
+            throw new RuntimeException(sprintf(
                 'Token refresh failed [HTTP %d]: %s',
                 $response->getStatusCode(),
                 $response->getMessage() ?? 'Unknown error'
@@ -283,6 +291,7 @@ abstract class OAuth2
      *
      * @param array<string, string> $params Form parameters for the token request.
      * @return OAuth2TokenResponse
+     * @throws Throwable
      */
     protected function buildTokenRequest(array $params): OAuth2TokenResponse
     {
@@ -321,8 +330,8 @@ abstract class OAuth2
     /**
      * Get the active authorization endpoint URL.
      *
-     * Returns the sandbox authorize endpoint when sandbox mode is enabled,
-     * otherwise returns the production authorize endpoint.
+     * Returns the sandbox authorized endpoint when sandbox mode is enabled,
+     * otherwise returns the production authorized endpoint.
      *
      * @return string The authorization endpoint URL.
      * @throws RuntimeException When the resolved endpoint is empty.
@@ -346,9 +355,10 @@ abstract class OAuth2
      * Generate a cryptographically random PKCE code verifier.
      *
      * Produces a 128-character string using only unreserved characters
-     * (A-Z, a-z, 0-9, -, ., _, ~) as defined by RFC 7636.
+     * (A-Z, a-z, 0-9, -, _, ~) as defined by RFC 7636.
      *
      * @return string The generated code verifier.
+     * @throws Exception
      */
     private function generateCodeVerifier(): string
     {
@@ -387,6 +397,7 @@ abstract class OAuth2
      * Produces a 64-character hexadecimal string from 32 random bytes.
      *
      * @return string The generated state value.
+     * @throws Exception
      */
     private function generateState(): string
     {
@@ -429,6 +440,7 @@ abstract class OAuth2
      *
      * @return string The complete authorization URL.
      * @throws RuntimeException When the authorization endpoint is not configured.
+     * @throws Exception
      */
     public function getAuthorizationUrl(): string
     {
@@ -497,14 +509,14 @@ abstract class OAuth2
      * @param string $code The authorization code from the callback.
      * @param string $state The state parameter from the callback.
      * @return TokenData The token data from the exchange.
-     * @throws RuntimeException When state validation fails, verifier is missing, or the HTTP request fails.
+     * @throws RuntimeException|Throwable When state validation fails, a verifier is missing, or the HTTP request fails.
      */
     public function exchangeCode(string $code, string $state): TokenData
     {
         $storedState = $this->storage->get("{$this->clientId}_oauth_state");
 
         if ($storedState === null) {
-            throw new RuntimeException(\sprintf(
+            throw new RuntimeException(sprintf(
                 'No stored state found for client "%s". The authorization flow may have expired or was not initiated.',
                 $this->clientId
             ));
@@ -521,7 +533,7 @@ abstract class OAuth2
         $verifier = $this->storage->get("{$this->clientId}_pkce_verifier");
 
         if ($verifier === null) {
-            throw new RuntimeException(\sprintf(
+            throw new RuntimeException(sprintf(
                 'No stored PKCE verifier found for client "%s". The authorization flow may have expired or was not initiated.',
                 $this->clientId
             ));
@@ -533,7 +545,7 @@ abstract class OAuth2
         $response = $this->buildTokenRequest($params);
 
         if (!$response->successful()) {
-            throw new RuntimeException(\sprintf(
+            throw new RuntimeException(sprintf(
                 'Code exchange failed [HTTP %d]: %s',
                 $response->getStatusCode(),
                 $response->getMessage() ?? 'Unknown error'

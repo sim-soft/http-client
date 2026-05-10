@@ -35,7 +35,7 @@ trait PrepareHandleTrait
     }
 
     /**
-     * Build the full URL with query string and set CURLOPT_URL.
+     * Build the full URL with a query string and set CURLOPT_URL.
      *
      * @return void
      */
@@ -105,7 +105,7 @@ trait PrepareHandleTrait
     }
 
     /**
-     * Merge cached static headers with dynamic per-request headers (e.g. content-length).
+     * Merge cached static headers with dynamic per-request headers (e.g., content-length).
      *
      * @return array<array-key, mixed>
      */
@@ -205,7 +205,7 @@ trait PrepareHandleTrait
     }
 
     /**
-     * Configure cURL for a standard array or string post body.
+     * Configure cURL for a standard array or string post-body.
      *
      * @return void
      */

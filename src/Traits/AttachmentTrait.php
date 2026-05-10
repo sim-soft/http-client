@@ -55,7 +55,7 @@ trait AttachmentTrait
     }
 
     /**
-     * Normalize attached file.
+     * Normalize an attached file.
      *
      * Dispatches to type-specific helpers based on the input type.
      *
@@ -90,7 +90,7 @@ trait AttachmentTrait
      * Normalize a resource attachment into a CURLFile.
      *
      * Handles open file resources by either referencing the underlying file path
-     * directly, or copying the stream content to a temporary file.
+     * directly or copying the stream content to a temporary file.
      *
      * @param resource $file The resource to normalize.
      * @param string|null $filename Optional posted filename.

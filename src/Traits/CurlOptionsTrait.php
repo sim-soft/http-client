@@ -5,7 +5,6 @@ namespace Simsoft\HttpClient\Traits;
 use CurlHandle;
 use InvalidArgumentException;
 use RuntimeException;
-use Simsoft\HttpClient\HttpClient;
 
 /**
  * CurlOptionsTrait — manages cURL handle lifecycle and option preparation.
