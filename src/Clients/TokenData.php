@@ -16,7 +16,7 @@ final class TokenData
      *
      * @param string $accessToken The OAuth2 access token string.
      * @param int $expiresAt Unix timestamp when the token expires.
-     * @param string|null $refreshToken Refresh token for obtaining new access tokens.
+     * @param string|null $refreshToken Refresh token for getting new access tokens.
      * @param string|null $tokenType Token type (typically "Bearer").
      * @param string|null $scope Granted scope string.
      */

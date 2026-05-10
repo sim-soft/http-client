@@ -20,6 +20,9 @@ class PoolBuilder
     /** @var string|null Bearer token applied to all requests. */
     private ?string $bearerToken = null;
 
+    /** @var bool Whether to use JSON content type for POST/PUT/PATCH requests. */
+    private bool $jsonMode = false;
+
     /**
      * Set the base URL for all requests created by this builder.
      *
@@ -63,6 +66,20 @@ class PoolBuilder
     }
 
     /**
+     * Set JSON mode for all POST/PUT/PATCH requests created by this builder.
+     *
+     * When enabled, request bodies are sent as JSON instead of multipart form data.
+     *
+     * @return $this
+     */
+    public function asJson(): self
+    {
+        $this->jsonMode = true;
+
+        return $this;
+    }
+
+    /**
      * Create a GET request.
      *
      * @param string $uri The request URL or path.
@@ -93,11 +110,7 @@ class PoolBuilder
     {
         $client = $this->buildClient($uri)->withMethod('POST');
 
-        if ($data !== null) {
-            $client->withMultipart($data);
-        }
-
-        return $client;
+        return $this->applyBody($client, $data);
     }
 
     /**
@@ -112,11 +125,7 @@ class PoolBuilder
     {
         $client = $this->buildClient($uri)->withMethod('PUT');
 
-        if ($data !== null) {
-            $client->withMultipart($data);
-        }
-
-        return $client;
+        return $this->applyBody($client, $data);
     }
 
     /**
@@ -131,11 +140,7 @@ class PoolBuilder
     {
         $client = $this->buildClient($uri)->withMethod('PATCH');
 
-        if ($data !== null) {
-            $client->withMultipart($data);
-        }
-
-        return $client;
+        return $this->applyBody($client, $data);
     }
 
     /**
@@ -150,9 +155,29 @@ class PoolBuilder
     {
         $client = $this->buildClient($uri)->withMethod('DELETE');
 
-        if ($data !== null) {
-            $client->withMultipart($data);
+        return $this->applyBody($client, $data);
+    }
+
+    /**
+     * Apply the request body using the appropriate content type.
+     *
+     * @param HttpClient $client The client to configure.
+     * @param mixed $data The request body data.
+     *
+     * @return HttpClient The configured client.
+     */
+    private function applyBody(HttpClient $client, mixed $data): HttpClient
+    {
+        if ($data === null) {
+            return $client;
         }
+
+        if ($this->jsonMode) {
+            $client->withJson($data);
+            return $client;
+        }
+
+        $client->withMultipart($data);
 
         return $client;
     }

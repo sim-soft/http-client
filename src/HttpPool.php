@@ -17,18 +17,36 @@ use SplObjectStorage;
  * A companion class for concurrent HTTP request execution via curl_multi_*.
  * Accepts an array of pre-configured HttpClient instances or closures returning
  * HttpClient instances and executes them concurrently with configurable
- * concurrency limits and per-response callbacks.
+ * concurrency limits, per-response callbacks, retries, and rate limiting.
+ *
+ * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @SuppressWarnings(PHPMD.TooManyPublicMethods)
  */
 class HttpPool
 {
     /** @var int Maximum concurrent requests. */
     private int $concurrency;
 
+    /** @var int Per-request timeout in seconds (0 = no timeout). */
+    private int $timeout = 0;
+
+    /** @var int Number of retry attempts for failed requests. */
+    private int $retries = 0;
+
+    /** @var int Delay between retry attempts in milliseconds. */
+    private int $retryDelayMs = 0;
+
+    /** @var int Delay between requests in milliseconds (rate limiting). */
+    private int $delayMs = 0;
+
     /** @var Closure|null Per-response callback: fn(Response, int|string): void */
     private ?Closure $onResponse = null;
 
     /** @var Closure|null Error callback: fn(Response, int|string): void */
     private ?Closure $onError = null;
+
+    /** @var Closure|null Progress callback: fn(int $completed, int $total): void */
+    private ?Closure $onProgress = null;
 
     /**
      * Static factory method.
@@ -102,6 +120,89 @@ class HttpPool
     }
 
     /**
+     * Set the per-request timeout in seconds.
+     *
+     * Each request in the pool will be aborted if it exceeds this duration.
+     * Set to 0 to disable (default).
+     *
+     * @param int $seconds Timeout in seconds.
+     *
+     * @return $this
+     *
+     * @throws InvalidArgumentException When timeout is negative.
+     */
+    public function timeout(int $seconds): self
+    {
+        if ($seconds < 0) {
+            throw new InvalidArgumentException(
+                'Timeout must be non-negative, got ' . $seconds . '.'
+            );
+        }
+
+        $this->timeout = $seconds;
+
+        return $this;
+    }
+
+    /**
+     * Set the number of retry attempts for failed requests.
+     *
+     * Failed requests (network errors or HTTP 5xx) will be retried up to
+     * this many times before being marked as failed in the result.
+     *
+     * @param int $attempts Number of retry attempts (0 = no retries).
+     * @param int $after Delay in milliseconds between retry attempts (default: 0).
+     *
+     * @return $this
+     *
+     * @throws InvalidArgumentException When attempts or delay is negative.
+     */
+    public function retries(int $attempts, int $after = 0): self
+    {
+        if ($attempts < 0) {
+            throw new InvalidArgumentException(
+                'Retries must be non-negative, got ' . $attempts . '.'
+            );
+        }
+
+        if ($after < 0) {
+            throw new InvalidArgumentException(
+                'Retry delay must be non-negative, got ' . $after . '.'
+            );
+        }
+
+        $this->retries = $attempts;
+        $this->retryDelayMs = $after;
+
+        return $this;
+    }
+
+    /**
+     * Set a delay between requests for rate limiting.
+     *
+     * Adds a pause (in milliseconds) after each request completes before
+     * the next one starts. Useful for respecting API rate limits.
+     *
+     * @param int $milliseconds Delay in milliseconds between requests.
+     *
+     * @return $this
+     *
+     * @throws InvalidArgumentException When delay is negative.
+     */
+    public function delay(int $milliseconds): self
+    {
+        if ($milliseconds < 0) {
+            throw new InvalidArgumentException(
+                'Delay must be non-negative, got ' . $milliseconds . '.'
+            );
+        }
+
+        $this->delayMs = $milliseconds;
+
+        return $this;
+    }
+
+    /**
      * Register a per-response callback.
      *
      * The callback is invoked with the Response object and its key
@@ -131,6 +232,23 @@ class HttpPool
     public function onError(Closure $callback): self
     {
         $this->onError = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Register a progress callback.
+     *
+     * The callback is invoked after each request completes with the current
+     * count of completed requests and the total number of requests.
+     *
+     * @param Closure $callback Callback receiving (int $completed, int $total): void.
+     *
+     * @return $this
+     */
+    public function onProgress(Closure $callback): self
+    {
+        $this->onProgress = $callback;
 
         return $this;
     }
@@ -224,28 +342,76 @@ class HttpPool
     /**
      * Execute FakeHttpClient instances directly without curl_multi.
      *
-     * Calls request() on each FakeHttpClient in a sliding window pattern
-     * to simulate concurrency behavior while using the fake response mechanism.
+     * Calls request() on each FakeHttpClient to simulate concurrency behavior
+     * while using the fake response mechanism. Supports retries and progress.
      *
      * @param array<int|string, FakeHttpClient> $clients The fake clients to execute.
      *
      * @return HttpPoolResult The pool result with all responses.
      * @throws Exception
+     *
+     * @SuppressWarnings(PHPMD.CyclomaticComplexity)
      */
     private function executeFakeClients(array $clients): HttpPoolResult
     {
         $responses = [];
+        $total = count($clients);
+        $completed = 0;
 
         foreach ($clients as $index => $client) {
-            $response = $client->request();
+            $response = $this->executeWithRetries($client);
 
             $responses[$index] = $response;
 
             $this->invokeOnResponse($response, $index);
             $this->invokeOnError($response, $index);
+
+            $completed++;
+            $this->invokeOnProgress($completed, $total);
+
+            $this->applyDelay();
         }
 
         return new HttpPoolResult($responses);
+    }
+
+    /**
+     * Execute a single FakeHttpClient with retry support.
+     *
+     * @param FakeHttpClient $client The fake client to execute.
+     *
+     * @return Response The final response after retries.
+     * @throws Exception
+     */
+    private function executeWithRetries(FakeHttpClient $client): Response
+    {
+        $maxAttempts = $this->retries + 1;
+        $response = $client->request();
+
+        for ($attempt = 1; $attempt < $maxAttempts && $this->shouldRetryResponse($response); $attempt++) {
+            $this->applyRetryDelay();
+            $response = $client->request();
+        }
+
+        return $response;
+    }
+
+    /**
+     * Determine if a response should be retried.
+     *
+     * Retries on network errors (errno > 0) or server errors (5xx).
+     *
+     * @param Response $response The response to evaluate.
+     *
+     * @return bool True if the request should be retried.
+     */
+    private function shouldRetryResponse(Response $response): bool
+    {
+        if ($response->getErrno() > 0) {
+            return true;
+        }
+
+        return $response->isServerError();
     }
 
     /**
@@ -253,7 +419,8 @@ class HttpPool
      *
      * Implements a sliding window approach: adds handles up to the concurrency
      * limit, polls for completion, replaces completed handles with pending ones,
-     * and continues until all requests are processed.
+     * and continues until all requests are processed. Supports per-request
+     * timeout, retries, rate limiting, and progress tracking.
      *
      * @param array<int|string, HttpClient> $clients The clients to execute concurrently.
      *
@@ -263,6 +430,7 @@ class HttpPool
      *
      * @SuppressWarnings(PHPMD.CyclomaticComplexity)
      * @SuppressWarnings(PHPMD.NPathComplexity)
+     * @SuppressWarnings(PHPMD.ExcessiveMethodLength)
      */
     private function executeWithCurlMulti(array $clients): HttpPoolResult
     {
@@ -278,6 +446,11 @@ class HttpPool
         /** @var SplObjectStorage<CurlHandle, int|string> $handleToIndex */
         $handleToIndex = new SplObjectStorage();
 
+        /** @var array<int|string, int> $retryCounts */
+        $retryCounts = [];
+
+        $total = count($clients);
+        $completed = 0;
         $pendingIndices = array_keys($clients);
         $activeCount = 0;
 
@@ -285,6 +458,7 @@ class HttpPool
         while ($activeCount < $this->concurrency && $pendingIndices !== []) {
             $index = array_shift($pendingIndices);
             $this->addHandleToMulti($multiHandle, $clients[$index], $index, $headerBuffers, $handleToIndex);
+            $retryCounts[$index] = 0;
             $activeCount++;
         }
 
@@ -304,15 +478,37 @@ class HttpPool
                 $index = $handleToIndex[$handle];
 
                 $response = $this->buildResponseFromHandle($handle, $index, $headerBuffers);
-                $responses[$index] = $response;
-
-                $this->invokeOnResponse($response, $index);
-                $this->invokeOnError($response, $index);
 
                 curl_multi_remove_handle($multiHandle, $handle);
                 curl_close($handle);
                 $handleToIndex->detach($handle);
                 $activeCount--;
+
+                // Retry logic
+                if ($this->shouldRetryResponse($response) && $retryCounts[$index] < $this->retries) {
+                    $retryCounts[$index]++;
+                    $this->applyRetryDelay();
+                    $headerBuffers[$index] = '';
+                    $this->addHandleToMulti(
+                        $multiHandle,
+                        $clients[$index],
+                        $index,
+                        $headerBuffers,
+                        $handleToIndex
+                    );
+                    $activeCount++;
+                    continue;
+                }
+
+                $responses[$index] = $response;
+
+                $this->invokeOnResponse($response, $index);
+                $this->invokeOnError($response, $index);
+
+                $completed++;
+                $this->invokeOnProgress($completed, $total);
+
+                $this->applyDelay();
 
                 // Add the next pending request to fill the window
                 if ($pendingIndices !== []) {
@@ -324,13 +520,14 @@ class HttpPool
                         $headerBuffers,
                         $handleToIndex
                     );
+                    $retryCounts[$nextIndex] = 0;
                     $activeCount++;
                 }
             }
 
             // Wait for activity if handles are still running
             if ($running > 0) {
-                curl_multi_select($multiHandle, 1.0);
+                curl_multi_select($multiHandle);
             }
         } while ($running > 0 || $activeCount > 0);
 
@@ -345,7 +542,7 @@ class HttpPool
      * Add a client's handle to the multi handle.
      *
      * Builds the curl handle from the client, sets up per-handle header
-     * capture, and adds it to the multi handle for concurrent execution.
+     * capture and timeout, and adds it to the multi handle for concurrent execution.
      *
      * @param CurlMultiHandle $multiHandle The curl multi handle.
      * @param HttpClient $client The client to add.
@@ -366,6 +563,10 @@ class HttpPool
     ): void
     {
         $handle = $client->buildHandle();
+
+        if ($this->timeout > 0) {
+            curl_setopt($handle, CURLOPT_TIMEOUT, $this->timeout);
+        }
 
         $headerBuffers[$index] = '';
         curl_setopt($handle, CURLOPT_HEADERFUNCTION, function ($curlHandle, $header) use ($index, &$headerBuffers) {
@@ -413,6 +614,34 @@ class HttpPool
     }
 
     /**
+     * Apply rate limiting delay between requests.
+     *
+     * @return void
+     */
+    private function applyDelay(): void
+    {
+        if ($this->delayMs <= 0) {
+            return;
+        }
+
+        usleep($this->delayMs * 1000);
+    }
+
+    /**
+     * Apply delay between retry attempts.
+     *
+     * @return void
+     */
+    private function applyRetryDelay(): void
+    {
+        if ($this->retryDelayMs <= 0) {
+            return;
+        }
+
+        usleep($this->retryDelayMs * 1000);
+    }
+
+    /**
      * Invoke the onResponse callback if configured.
      *
      * @param Response $response The completed response.
@@ -448,5 +677,22 @@ class HttpPool
         }
 
         ($this->onError)($response, $index);
+    }
+
+    /**
+     * Invoke the onProgress callback if configured.
+     *
+     * @param int $completed Number of completed requests.
+     * @param int $total Total number of requests.
+     *
+     * @return void
+     */
+    private function invokeOnProgress(int $completed, int $total): void
+    {
+        if ($this->onProgress === null) {
+            return;
+        }
+
+        ($this->onProgress)($completed, $total);
     }
 }

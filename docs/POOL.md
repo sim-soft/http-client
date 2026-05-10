@@ -6,7 +6,9 @@ callbacks.
 
 > **Note:** The examples below omit `use` imports for brevity. All examples
 > require `use Simsoft\HttpClient\HttpClient` and
-> `use Simsoft\HttpClient\HttpPool` at minimum.
+> `use Simsoft\HttpClient\HttpPool` at minimum. Some examples also use
+> `use Simsoft\HttpClient\PoolBuilder` and
+`use Simsoft\HttpClient\HttpPoolResult`.
 
 ## Basic Usage
 
@@ -15,9 +17,7 @@ Send multiple requests concurrently and collect all responses:
 ```php
 use Simsoft\HttpClient\HttpClient;
 use Simsoft\HttpClient\HttpPool;
-use Simsoft\HttpClient\HttpPoolResult;
 
-/** @var HttpPoolResult $result */
 $result = HttpPool::create()->send([
     HttpClient::make()->withBaseUrl('https://api.example.com')->resource('/users')->withMethod('GET'),
     HttpClient::make()->withBaseUrl('https://api.example.com')->resource('/posts')->withMethod('GET'),
@@ -92,6 +92,9 @@ HttpClient's `get()`, `post()`, `put()`, `patch()`, and `delete()` methods —
 but configures requests without executing them:
 
 ```php
+use Simsoft\HttpClient\HttpPool;
+use Simsoft\HttpClient\PoolBuilder;
+
 $result = HttpPool::run(fn (PoolBuilder $pool) => [
     'users'    => $pool->get('https://api.example.com/users'),
     'posts'    => $pool->post('https://api.example.com/posts', ['title' => 'Hello']),
@@ -127,6 +130,49 @@ $result = HttpPool::run(function (PoolBuilder $pool) {
         'comments' => $pool->get('/comments', ['limit' => 10]),
     ];
 }, concurrency: 10);
+```
+
+Use `asJson()` to send all POST/PUT/PATCH bodies as JSON:
+
+```php
+$result = HttpPool::run(function (PoolBuilder $pool) {
+    $pool->withBaseUrl('https://api.example.com')
+        ->withBearerToken('YOUR_TOKEN')
+        ->asJson();
+
+    return [
+        'create' => $pool->post('/users', ['name' => 'Alice', 'email' => 'alice@example.com']),
+        'update' => $pool->patch('/users/1', ['name' => 'Bob']),
+        'delete' => $pool->delete('/users/2'),
+    ];
+});
+```
+
+Since `$pool->get()`, `$pool->post()`, etc. return `HttpClient` instances, you
+can chain any HttpClient method on individual requests — middleware, JSON mode,
+custom headers, timeouts:
+
+```php
+$result = HttpPool::run(function (PoolBuilder $pool) {
+    $pool->withBaseUrl('https://api.example.com')
+        ->withBearerToken('YOUR_TOKEN');
+
+    return [
+        'users' => $pool->get('/users')
+            ->withMiddleware(function (HttpClient $request, Closure $next): Response {
+                $request->withHeader('X-Cache', 'skip');
+                return $next();
+            }, 'cache-bypass'),
+
+        'posts' => $pool->post('/posts')
+            ->asJson()
+            ->withJson(['title' => 'Hello', 'body' => 'World']),
+
+        'report' => $pool->get('/reports/daily')
+            ->timeout(60)
+            ->withQuery(['format' => 'csv']),
+    ];
+});
 ```
 
 ## Cloning a Shared Base Client
@@ -249,6 +295,110 @@ Choose a concurrency limit based on your target server's capacity and your
 system resources. Lower values are gentler on the target; higher values maximize
 throughput.
 
+## Per-Request Timeout
+
+Set a maximum duration for each individual request in the pool. Requests that
+exceed the timeout are aborted and marked as failed:
+
+```php
+$result = HttpPool::create()
+    ->concurrency(10)
+    ->timeout(5) // each request must complete within 5 seconds
+    ->send($requests);
+
+// Timed-out requests appear in getFailed()
+foreach ($result->getFailed() as $key => $response) {
+    echo "{$key}: timed out or failed\n";
+}
+```
+
+## Retries
+
+Automatically retry failed requests (network errors or HTTP 5xx) before marking
+them as failed:
+
+```php
+$result = HttpPool::create()
+    ->concurrency(10)
+    ->retries(3) // retry up to 3 times on failure
+    ->send($requests);
+```
+
+Add a delay between retry attempts to avoid hammering the server:
+
+```php
+$result = HttpPool::create()
+    ->concurrency(10)
+    ->retries(3, after: 500) // retry up to 3 times, wait 500ms between attempts
+    ->send($requests);
+```
+
+Retries apply to network errors (`errno > 0`) and server errors (5xx status
+codes). Client errors (4xx) are not retried — they indicate a problem with the
+request itself.
+
+Combine with timeout to avoid hanging retries:
+
+```php
+$result = HttpPool::create()
+    ->concurrency(5)
+    ->timeout(10)
+    ->retries(2)
+    ->send($requests);
+```
+
+## Rate Limiting
+
+Add a delay between completed requests to respect API rate limits:
+
+```php
+$result = HttpPool::create()
+    ->concurrency(3)
+    ->delay(200) // wait 200ms after each request completes
+    ->send($requests);
+```
+
+This is different from concurrency — concurrency controls how many requests are
+in-flight simultaneously, while delay adds a pause after each completion before
+the next request starts. Use both together for gentle scraping:
+
+```php
+// Max 2 concurrent, 500ms pause between completions
+$result = HttpPool::create()
+    ->concurrency(2)
+    ->delay(500)
+    ->send($requests);
+```
+
+## Progress Tracking
+
+Monitor batch progress with the `onProgress` callback:
+
+```php
+$result = HttpPool::create()
+    ->concurrency(10)
+    ->onProgress(function (int $completed, int $total) {
+        $percent = round(($completed / $total) * 100);
+        echo "\r{$completed}/{$total} ({$percent}%)";
+    })
+    ->send($requests);
+
+echo "\nDone!\n";
+```
+
+The callback fires after each request completes, receiving the current count
+and the total. Combine with other callbacks:
+
+```php
+$result = HttpPool::create()
+    ->concurrency(10)
+    ->onProgress(fn ($done, $total) => updateProgressBar($done, $total))
+    ->onError(fn ($response, $key) => logFailure($key, $response))
+    ->retries(2)
+    ->timeout(15)
+    ->send($requests);
+```
+
 ## Per-Response Callbacks
 
 Process responses as they arrive rather than waiting for the entire batch to
@@ -280,7 +430,7 @@ $pool = HttpPool::create()
     ->concurrency(10)
     ->onError(function ($response, $index) {
         echo "[{$index}] Failed: HTTP {$response->getStatusCode()}\n";
-        echo "  Error: {$response->getError()}\n";
+        echo "  Error: {$response->getMessage()}\n";
     });
 
 $result = $pool->send($requests);
@@ -316,7 +466,7 @@ $pool = HttpPool::create()
     })
     ->onError(function ($response, $index) {
         // Fires only for failed requests
-        alertOnFailure($index, $response->getError());
+        alertOnFailure($index, $response->getMessage());
     });
 ```
 

@@ -2,7 +2,7 @@
 
 ## Language & Runtime
 
-- PHP 8.1+
+- PHP ^8.1 (must be compatible with 8.1, 8.2, 8.3, 8.4)
 - ext-curl (required)
 
 ## Package Manager
@@ -14,7 +14,6 @@
 - `psr/http-message` ^1.1|^2.0
 - `psr/http-client` ^1.0
 - `psr/http-factory` ^1
-- `league/oauth2-client` ^2
 
 ## Dependencies (Dev)
 
@@ -45,6 +44,8 @@
   deprecations
 - Tests use `#[Test]` attributes (not `@test` annotations)
 - Property-based tests via `steos/quickcheck`
+- Built-in test double: `FakeHttpClient` for mocking HTTP requests without
+  network
 
 ## Autoloading (PSR-4)
 

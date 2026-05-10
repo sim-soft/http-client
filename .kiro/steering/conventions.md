@@ -50,11 +50,19 @@
 - No unnecessary pass-by-reference — only use `&` when the function actually
   modifies the array/variable. Read-only access must use pass-by-value. If in
   doubt, pass by value; refactor to reference only when mutation is required.
+- PHP version compatibility — all code must be compatible with the minimum PHP
+  version in `composer.json` (`^8.1`). Do not use classes, functions, constants,
+  or syntax introduced in later PHP versions. When fixing compatibility issues,
+  fix both the import and all usages (type hints, catch blocks, instanceof
+  checks, PHPDoc `@throws`). Guard version-specific constants with `defined()`
+  checks and provide fallback values.
 
 ## Model/Data Encapsulation
 
 - Model attributes must only be accessed within the model itself
 - Direct external access to model attributes is prohibited
+- Always check for existing accessor methods before attempting to read a
+  property — use the getter if one exists
 - Query builders must be implemented inside the model to avoid exposing
   attributes
 - If MVC structure exists: fat model, thin controller — logic decisions in
@@ -65,6 +73,9 @@
 - All new classes, libraries, or helper functions MUST include a usage guide
 - Documentation saved as markdown in `docs/`
 - Must include example usage demonstrating common scenarios
+- All code examples in documentation MUST use actual method names and signatures
+  from the implementation — verify method names, parameter types, and return
+  types exist before writing examples. Do not invent methods that don't exist.
 
 ## Unit Testing Policy
 

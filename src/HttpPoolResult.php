@@ -7,6 +7,7 @@ use ArrayIterator;
 use Countable;
 use IteratorAggregate;
 use OutOfBoundsException;
+use RuntimeException;
 use Traversable;
 
 /**
@@ -126,13 +127,13 @@ class HttpPoolResult implements Countable, ArrayAccess, IteratorAggregate
      * @param mixed $offset The key.
      * @param mixed $value The value.
      *
-     * @throws \RuntimeException Always thrown — result is read-only.
+     * @throws RuntimeException Always thrown — a result is read-only.
      *
      * @SuppressWarnings(PHPMD.UnusedFormalParameter)
      */
     public function offsetSet(mixed $offset, mixed $value): void
     {
-        throw new \RuntimeException('HttpPoolResult is immutable.');
+        throw new RuntimeException('HttpPoolResult is immutable.');
     }
 
     /**
@@ -140,13 +141,13 @@ class HttpPoolResult implements Countable, ArrayAccess, IteratorAggregate
      *
      * @param mixed $offset The key.
      *
-     * @throws \RuntimeException Always thrown — result is read-only.
+     * @throws RuntimeException Always thrown — a result is read-only.
      *
      * @SuppressWarnings(PHPMD.UnusedFormalParameter)
      */
     public function offsetUnset(mixed $offset): void
     {
-        throw new \RuntimeException('HttpPoolResult is immutable.');
+        throw new RuntimeException('HttpPoolResult is immutable.');
     }
 
     /**

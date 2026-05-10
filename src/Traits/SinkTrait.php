@@ -8,7 +8,7 @@ use InvalidArgumentException;
  * SinkTrait — manages download/sink functionality for HTTP requests.
  *
  * Provides methods for file-based and stream-based download modes,
- * including destination validation and the internal write handler.
+ * including destination validation and the internal writing handler.
  */
 trait SinkTrait
 {
@@ -22,7 +22,7 @@ trait SinkTrait
     protected bool $sinkOwned = false;
 
     /**
-     * Download file using file-based mode (CURLOPT_FILE).
+     * Download a file using a file-based mode (CURLOPT_FILE).
      *
      * Sets up the sink destination for direct file writing via cURL's
      * built-in file output mechanism.
@@ -44,7 +44,7 @@ trait SinkTrait
     }
 
     /**
-     * Download file using stream-based mode (CURLOPT_WRITEFUNCTION).
+     * Download the file using stream-based mode (CURLOPT_WRITEFUNCTION).
      *
      * Sets up the sink destination for chunk-based writing via cURL's
      * write function callback.
