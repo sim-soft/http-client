@@ -7,11 +7,11 @@ namespace Simsoft\HttpClient\Traits;
  */
 trait Sandbox
 {
-    /** @var string|null Production endpoint */
-    protected ?string $endpoint;
+    /** @var string Production endpoint */
+    protected string $endpoint = '';
 
-    /** @var string|null Sandbox endpoint. */
-    protected ?string $sandboxEndpoint;
+    /** @var string Sandbox endpoint. */
+    protected string $sandboxEndpoint = '';
 
     /** @var bool Determine is sandbox mode. */
     protected bool $sandboxMode = false;
@@ -35,6 +35,7 @@ trait Sandbox
      */
     public function getEndpoint(?string $uri = null): string
     {
-        return ($this->sandboxMode ? $this->sandboxEndpoint :  $this->endpoint) . $uri;
+        $base = $this->sandboxMode ? $this->sandboxEndpoint : $this->endpoint;
+        return $base . ($uri ?? '');
     }
 }

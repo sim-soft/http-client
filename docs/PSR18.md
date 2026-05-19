@@ -108,3 +108,11 @@ $response = $client
 // PSR-18 — when passing to a third-party SDK
 $sdk = new SomeApiSdk(httpClient: $client);
 ```
+
+---
+
+## See Also
+
+- [Custom SDK](CUSTOM_SDK.md) — build typed SDK clients
+- [Testing](TESTING.md) — mock PSR-18 requests
+- [← Back to README](../README.md)

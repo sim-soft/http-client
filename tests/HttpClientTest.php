@@ -518,4 +518,26 @@ class HttpClientTest extends TestCase
 
         $this->assertFalse($client->shouldRetry($response));
     }
+
+    /**
+     * Test getMethod() returns the current HTTP method.
+     *
+     * @return void
+     */
+    #[Test]
+    public function getMethodReturnsCurrentHttpMethod(): void
+    {
+        $client = HttpClient::make();
+
+        $this->assertSame('GET', $client->getMethod());
+
+        $client->withMethod('POST');
+        $this->assertSame('POST', $client->getMethod());
+
+        $client->withMethod('put');
+        $this->assertSame('PUT', $client->getMethod());
+
+        $client->withMethod('DELETE');
+        $this->assertSame('DELETE', $client->getMethod());
+    }
 }

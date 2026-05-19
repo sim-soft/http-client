@@ -12,12 +12,15 @@ callbacks.
 
 ## Basic Usage
 
-Send multiple requests concurrently and collect all responses:
+Send multiple requests concurrently. Both `HttpPool::create()->send()` and
+`HttpPool::run()` return an `HttpPoolResult` instance containing all responses:
 
 ```php
 use Simsoft\HttpClient\HttpClient;
 use Simsoft\HttpClient\HttpPool;
+use Simsoft\HttpClient\HttpPoolResult;
 
+/** @var HttpPoolResult $result */
 $result = HttpPool::create()->send([
     HttpClient::make()->withBaseUrl('https://api.example.com')->resource('/users')->withMethod('GET'),
     HttpClient::make()->withBaseUrl('https://api.example.com')->resource('/posts')->withMethod('GET'),
@@ -694,3 +697,12 @@ foreach ($urls as $url) {
 $result = HttpPool::create()->send($requests);
 // Total time: ~200ms (limited by the slowest single request)
 ```
+
+---
+
+## See Also
+
+- [Testing Pools](TESTING.md) — use FakeHttpClient with HttpPool
+- [Middleware](MIDDLEWARE.md) — intercept requests/responses
+- [OAuth2](OAUTH2.md) — authenticate pooled requests via middleware
+- [← Back to README](../README.md)

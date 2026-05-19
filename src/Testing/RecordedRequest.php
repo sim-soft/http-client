@@ -22,8 +22,8 @@ final class RecordedRequest
     public function __construct(
         public readonly string $method,
         public readonly string $url,
-        public readonly array  $headers,
-        public readonly mixed  $body,
+        public readonly array $headers,
+        public readonly mixed $body,
     )
     {
     }

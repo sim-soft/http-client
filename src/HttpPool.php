@@ -477,7 +477,7 @@ class HttpPool
                 $handle = $info['handle'];
                 $index = $handleToIndex[$handle];
 
-                $response = $this->buildResponseFromHandle($handle, $index, $headerBuffers);
+                $response = $this->buildResponseFromHandle($handle, $index, $headerBuffers, $clients);
 
                 curl_multi_remove_handle($multiHandle, $handle);
                 curl_close($handle);
@@ -527,7 +527,10 @@ class HttpPool
 
             // Wait for activity if handles are still running
             if ($running > 0) {
-                curl_multi_select($multiHandle);
+                curl_multi_select($multiHandle, 1.0);
+            } elseif ($activeCount > 0) {
+                // Handles were just added (e.g., retry) — re-exec immediately
+                curl_multi_exec($multiHandle, $running);
             }
         } while ($running > 0 || $activeCount > 0);
 
@@ -555,10 +558,10 @@ class HttpPool
      * @SuppressWarnings(PHPMD.UnusedFormalParameter)
      */
     private function addHandleToMulti(
-        CurlMultiHandle  $multiHandle,
-        HttpClient       $client,
-        int|string       $index,
-        array            &$headerBuffers,
+        CurlMultiHandle $multiHandle,
+        HttpClient      $client,
+        int|string      $index,
+        array           &$headerBuffers,
         SplObjectStorage $handleToIndex
     ): void
     {
@@ -569,7 +572,8 @@ class HttpPool
         }
 
         $headerBuffers[$index] = '';
-        curl_setopt($handle, CURLOPT_HEADERFUNCTION, function ($curlHandle, $header) use ($index, &$headerBuffers) {
+        curl_setopt($handle, CURLOPT_HEADERFUNCTION, static function ($curlHandle, $header) use ($index, &$headerBuffers) {
+            unset($curlHandle); // required by cURL callback signature
             $headerBuffers[$index] .= $header;
             return strlen($header);
         });
@@ -587,13 +591,15 @@ class HttpPool
      * @param CurlHandle $handle The completed curl handle.
      * @param int|string $index The original request key.
      * @param array<int|string, string> $headerBuffers The header buffers.
+     * @param array<int|string, HttpClient> $clients The original clients array.
      *
      * @return Response The constructed response.
      */
     private function buildResponseFromHandle(
         CurlHandle $handle,
         int|string $index,
-        array      $headerBuffers,
+        array $headerBuffers,
+        array $clients = [],
     ): Response
     {
         $curlInfo = curl_getinfo($handle);
@@ -604,10 +610,16 @@ class HttpPool
         $error = $curlError ?: ($curlInfo['http_code'] >= 400 ? 'HTTP Error' : '');
         $rawHeaders = $headerBuffers[$index] ?? '';
 
+        $sinkPath = null;
+        if (isset($clients[$index])) {
+            $sinkPath = $clients[$index]->getPoolSinkPath();
+        }
+
         return new Response(
             curlInfo: $curlInfo,
             body: $body,
             message: $error,
+            sinkPath: $sinkPath,
             errno: $curlErrno,
             rawHeaders: $rawHeaders,
         );

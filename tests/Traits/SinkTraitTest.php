@@ -31,25 +31,15 @@ class SinkHost
     {
         return $this->options;
     }
-
-    /**
-     * Public proxy to the protected writeToSink method for testing.
-     *
-     * @param mixed $curlHandle The cURL handle.
-     * @param string $data The data chunk to write.
-     * @return int The number of bytes written.
-     */
-    public function testWriteToSink(mixed $curlHandle, string $data): int
-    {
-        return $this->writeToSink($curlHandle, $data);
-    }
 }
 
 /**
  * SinkTraitTest class
  *
  * Tests for the SinkTrait: sink() file-based mode, sinkStream() stream-based mode,
- * destination validation, and writeToSink() behavior.
+ * and destination validation.
+ *
+ * @SuppressWarnings(PHPMD.TooManyPublicMethods)
  */
 class SinkTraitTest extends TestCase
 {
@@ -124,7 +114,7 @@ class SinkTraitTest extends TestCase
             $this->assertSame($this->host, $result);
             $this->assertFalse($options[CURLOPT_RETURNTRANSFER]);
             $this->assertArrayHasKey(CURLOPT_WRITEFUNCTION, $options);
-            $this->assertSame([$this->host, 'writeToSink'], $options[CURLOPT_WRITEFUNCTION]);
+            $this->assertIsCallable($options[CURLOPT_WRITEFUNCTION]);
             $this->assertArrayNotHasKey(CURLOPT_FILE, $options);
         } finally {
             @unlink($tmpFile);
@@ -171,7 +161,7 @@ class SinkTraitTest extends TestCase
             $options = $this->host->getOptions();
 
             $this->assertArrayHasKey(CURLOPT_WRITEFUNCTION, $options);
-            $this->assertSame([$this->host, 'writeToSink'], $options[CURLOPT_WRITEFUNCTION]);
+            $this->assertIsCallable($options[CURLOPT_WRITEFUNCTION]);
             $this->assertArrayNotHasKey(CURLOPT_FILE, $options);
         } finally {
             fclose($resource);
@@ -183,7 +173,7 @@ class SinkTraitTest extends TestCase
      *
      * The old API used sink($dest, true) for stream-based mode. The new sinkStream()
      * must set the same options: CURLOPT_RETURNTRANSFER=false, CURLOPT_WRITEFUNCTION
-     * pointing to writeToSink, and no CURLOPT_FILE.
+     * as a callable, and no CURLOPT_FILE.
      *
      * @return void
      */
@@ -203,8 +193,8 @@ class SinkTraitTest extends TestCase
             $this->assertArrayHasKey(CURLOPT_WRITEFUNCTION, $options);
             $this->assertArrayNotHasKey(CURLOPT_FILE, $options);
 
-            // The write function should be the writeToSink method
-            $this->assertSame([$this->host, 'writeToSink'], $options[CURLOPT_WRITEFUNCTION]);
+            // The write function should be a callable closure
+            $this->assertIsCallable($options[CURLOPT_WRITEFUNCTION]);
         } finally {
             @unlink($tmpFile);
         }
@@ -239,12 +229,12 @@ class SinkTraitTest extends TestCase
     }
 
     /**
-     * Test that writeToSink() writes data correctly to the sink resource.
+     * Test that the write function writes data correctly to the sink resource.
      *
      * @return void
      */
     #[Test]
-    public function writeToSinkWritesDataCorrectly(): void
+    public function writeCallbackWritesDataCorrectly(): void
     {
         $resource = fopen('php://memory', 'w+');
         $this->assertNotFalse($resource);
@@ -252,8 +242,11 @@ class SinkTraitTest extends TestCase
         try {
             $this->host->sinkStream($resource);
 
+            $options = $this->host->getOptions();
+            $writeFunction = $options[CURLOPT_WRITEFUNCTION];
+
             $curlHandle = curl_init();
-            $bytesWritten = $this->host->testWriteToSink($curlHandle, 'hello world');
+            $bytesWritten = $writeFunction($curlHandle, 'hello world');
             curl_close($curlHandle);
 
             $this->assertSame(11, $bytesWritten);

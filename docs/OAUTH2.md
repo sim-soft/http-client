@@ -677,3 +677,12 @@ storage.
 | **league/oauth2-client** | You need a pre-built provider package (Google, GitHub, Stripe, etc.) with provider-specific user info fetching.                            |
 | **Laravel Socialite**    | You're in Laravel and need social login (redirect → callback → user info) with minimal setup.                                              |
 | **Guzzle + manual**      | You need full control over every aspect of the OAuth2 flow with custom logic at each step, or you're already deep in a Guzzle-based stack. |
+
+---
+
+## See Also
+
+- [Middleware](MIDDLEWARE.md) — inject OAuth2 tokens automatically
+- [Custom SDK](CUSTOM_SDK.md) — build authenticated SDK clients
+- [Testing](TESTING.md) — mock OAuth2-protected endpoints
+- [← Back to README](../README.md)

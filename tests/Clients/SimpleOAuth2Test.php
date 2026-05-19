@@ -10,6 +10,7 @@ use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
 use Simsoft\HttpClient\Clients\Responses\SimpleOAuth2Response;
 use Simsoft\HttpClient\Clients\SimpleOAuth2;
+use Simsoft\HttpClient\Clients\TokenData;
 use Simsoft\HttpClient\Interfaces\StorageInterface;
 
 /**
@@ -103,9 +104,10 @@ class SimpleOAuth2Test extends TestCase
     #[Test]
     public function getAccessTokenReturnsCachedNonExpiredToken(): void
     {
-        $cachedResponse = $this->createMock(SimpleOAuth2Response::class);
-        $cachedResponse->method('hasExpired')->willReturn(false);
-        $cachedResponse->method('getToken')->willReturn('cached-simple-token');
+        $cachedToken = new TokenData(
+            accessToken: 'cached-simple-token',
+            expiresAt: time() + 3600,
+        );
 
         $this->storage->method('has')
             ->with($this->clientId)
@@ -113,7 +115,7 @@ class SimpleOAuth2Test extends TestCase
 
         $this->storage->method('get')
             ->with($this->clientId)
-            ->willReturn($cachedResponse);
+            ->willReturn($cachedToken);
 
         $instance = $this->createInstance();
 
@@ -130,8 +132,10 @@ class SimpleOAuth2Test extends TestCase
     #[Test]
     public function expiredTokenTriggersNewPostRequest(): void
     {
-        $expiredResponse = $this->createMock(SimpleOAuth2Response::class);
-        $expiredResponse->method('hasExpired')->willReturn(true);
+        $expiredToken = new TokenData(
+            accessToken: 'expired-token',
+            expiresAt: time() - 100,
+        );
 
         $this->storage->method('has')
             ->with($this->clientId)
@@ -139,7 +143,7 @@ class SimpleOAuth2Test extends TestCase
 
         $this->storage->method('get')
             ->with($this->clientId)
-            ->willReturn($expiredResponse);
+            ->willReturn($expiredToken);
 
         $newResponse = new SimpleOAuth2Response(
             curlInfo: ['http_code' => 200],
@@ -159,7 +163,7 @@ class SimpleOAuth2Test extends TestCase
 
         $this->storage->expects($this->once())
             ->method('set')
-            ->with($this->clientId, $newResponse);
+            ->with($this->clientId, $this->isInstanceOf(TokenData::class));
 
         $result = $instance->getAccessToken();
 

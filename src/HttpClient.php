@@ -35,7 +35,15 @@ use Throwable;
  */
 class HttpClient implements ClientInterface
 {
-    use Macroable, DeprecatedTrait, DebugTrait, CurlOptionsTrait, PrepareHandleTrait, RetryTrait, RequestBodyTrait, AttachmentTrait, SinkTrait;
+    use Macroable;
+    use DeprecatedTrait;
+    use DebugTrait;
+    use CurlOptionsTrait;
+    use PrepareHandleTrait;
+    use RetryTrait;
+    use RequestBodyTrait;
+    use AttachmentTrait;
+    use SinkTrait;
 
     /** @var bool Determine to throw an exception on error. */
     protected bool $throwOnError = false;
@@ -70,10 +78,10 @@ class HttpClient implements ClientInterface
     /** @var LoggerInterface|null Logger instance. */
     protected ?LoggerInterface $logger = null;
 
-    const TYPE_JSON = 'json';
-    const TYPE_FORM = 'form';
-    const TYPE_MULTIPART = 'multipart';
-    const TYPE_RAW = 'raw';
+    public const TYPE_JSON = 'json';
+    public const TYPE_FORM = 'form';
+    public const TYPE_MULTIPART = 'multipart';
+    public const TYPE_RAW = 'raw';
 
     /**
      * Factory method.
@@ -165,6 +173,16 @@ class HttpClient implements ClientInterface
     }
 
     /**
+     * Get the current HTTP method.
+     *
+     * @return string The HTTP method (e.g., GET, POST, PUT, PATCH, DELETE).
+     */
+    public function getMethod(): string
+    {
+        return $this->method;
+    }
+
+    /**
      * Alias to resource().
      *
      * @param string $url
@@ -203,7 +221,7 @@ class HttpClient implements ClientInterface
      */
     public function withHeaders(array $headers): self
     {
-        foreach($headers as $name => $value) {
+        foreach ($headers as $name => $value) {
             $this->withHeader($name, $value);
         }
         return $this;
@@ -462,13 +480,13 @@ class HttpClient implements ClientInterface
                     static::TYPE_FORM => $this->withForm($data),
                     static::TYPE_MULTIPART => $this->withMultipart($data),
                     default => match (true) {
+                        $data instanceof StreamInterface => $this->withBody($data),
                         is_string($data) => $this->withBody($data, 'text/plain'),
                         is_array($data) => strtoupper($method) === 'GET' ? $this->withQuery($data) : $this->withMultipart($data),
                         default => throw new InvalidArgumentException('Unsupported data type: ' . get_debug_type($data)),
                     },
                 };
             }
-
         } catch (Throwable $throwable) {
             $this->flush();
             throw $throwable;
@@ -551,6 +569,16 @@ class HttpClient implements ClientInterface
     }
 
     /**
+     * Get the sink path for pool response construction.
+     *
+     * @return string|null The sink file path, or null if no sink is configured.
+     */
+    public function getPoolSinkPath(): ?string
+    {
+        return $this->sinkPath;
+    }
+
+    /**
      * Creates a closure that handles the core HTTP request logic, including retries, error handling,
      * and response generation.
      *
@@ -621,12 +649,11 @@ class HttpClient implements ClientInterface
      * @param CurlHandle $curl The cURL handle to configure.
      * @param string $rawHeaders Reference to the string that will accumulate headers.
      * @return void
-     *
-     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
      */
     private function setupHeaderCapture(CurlHandle $curl, string &$rawHeaders): void
     {
-        curl_setopt($curl, CURLOPT_HEADERFUNCTION, function ($curlHandle, $header) use (&$rawHeaders) {
+        curl_setopt($curl, CURLOPT_HEADERFUNCTION, static function ($curlHandle, $header) use (&$rawHeaders) {
+            unset($curlHandle); // required by cURL callback signature
             $rawHeaders .= $header;
             return strlen($header);
         });

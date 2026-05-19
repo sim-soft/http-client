@@ -218,34 +218,50 @@ final class FakeHttpClient extends HttpClient
      * Records the request details, iterates through configured routes
      * to find a match, and returns the matched route's next response.
      * Throws UnexpectedRequestException if no route matches.
+     * Supports retry logic consistent with the real HttpClient.
      *
      * @return Closure
      */
     protected function getCoreHandler(): Closure
     {
         return function (): Response {
-            $method = $this->method;
-            $url = $this->getEndpoint();
+            $maxAttempts = $this->retry + 1;
+            $attempts = 1;
 
-            if (!empty($this->queryParams)) {
-                $separator = str_contains($url, '?') ? '&' : '?';
-                $url .= $separator . http_build_query($this->queryParams);
-            }
+            do {
+                $method = $this->method;
+                $url = $this->getEndpoint();
 
-            $this->recorded[] = new RecordedRequest(
-                method: $method,
-                url: $url,
-                headers: $this->headers,
-                body: $this->postFields,
-            );
-
-            foreach ($this->routes as $route) {
-                if ($route->match($method, $url)) {
-                    return $route->nextResponse();
+                if (!empty($this->queryParams)) {
+                    $separator = str_contains($url, '?') ? '&' : '?';
+                    $url .= $separator . http_build_query($this->queryParams);
                 }
-            }
 
-            throw new UnexpectedRequestException($method, $url);
+                $this->recorded[] = new RecordedRequest(
+                    method: $method,
+                    url: $url,
+                    headers: $this->headers,
+                    body: $this->postFields,
+                );
+
+                $response = null;
+                foreach ($this->routes as $route) {
+                    if ($route->match($method, $url)) {
+                        $response = $route->nextResponse();
+                        break;
+                    }
+                }
+
+                if ($response === null) {
+                    throw new UnexpectedRequestException($method, $url);
+                }
+
+                if (!$this->shouldRetry($response, $attempts) || ++$attempts > $maxAttempts) {
+                    return $response;
+                }
+
+                $this->wait();
+            } while (true);
         };
     }
 

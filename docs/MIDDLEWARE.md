@@ -105,7 +105,7 @@ $client = HttpClient::make()
     ->withBaseUrl('https://api.example.com')
     ->withMiddleware(function (HttpClient $request, Closure $next) use ($cache): Response {
         // Only cache GET requests
-        if ($request->method !== 'GET') {
+        if ($request->getMethod() !== 'GET') {
             return $next();
         }
 
@@ -246,3 +246,12 @@ $client = HttpClient::make()
 
 $response = $client->get('/dashboard');
 ```
+
+---
+
+## See Also
+
+- [OAuth2 via Middleware](OAUTH2.md#oauth2-httpclient) — auto-inject tokens
+- [Testing Middleware](TESTING.md) — mock requests with FakeHttpClient
+- [Concurrent Requests](POOL.md) — execute requests in parallel
+- [← Back to README](../README.md)
