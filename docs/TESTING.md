@@ -503,3 +503,12 @@ class PaymentGatewayTest extends TestCase
     }
 }
 ```
+
+---
+
+## See Also
+
+- [Concurrent Requests](POOL.md) — FakeHttpClient works with HttpPool
+- [Middleware](MIDDLEWARE.md) — test middleware behavior
+- [Custom SDK](CUSTOM_SDK.md) — test custom response classes
+- [← Back to README](../README.md)

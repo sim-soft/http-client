@@ -212,3 +212,12 @@ echo $response->getName();
 echo $response->getAge();
 echo $response->isAdult() ? 'Is adult': 'Is not adult';
 ```
+
+---
+
+## See Also
+
+- [Macro & Mixin](MACRO.md) — add methods without subclassing
+- [OAuth2](OAUTH2.md) — authenticate SDK clients
+- [Testing](TESTING.md) — test custom SDK clients with FakeHttpClient
+- [← Back to README](../README.md)

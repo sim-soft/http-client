@@ -25,7 +25,7 @@ final class FakeRoute
      */
     public function __construct(
         private readonly string|Closure $matcher,
-        private readonly array          $responses,
+        private readonly array $responses,
     )
     {
     }

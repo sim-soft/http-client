@@ -172,9 +172,7 @@ trait PrepareHandleTrait
     /**
      * Configure cURL for a PSR-7 StreamInterface body.
      *
-     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
-     *
-     * @param StreamInterface $stream
+     * @param StreamInterface $stream The request body stream.
      * @return void
      */
     private function prepareStreamPostFields(StreamInterface $stream): void
@@ -197,7 +195,8 @@ trait PrepareHandleTrait
             unset($this->options[CURLOPT_UPLOAD]);
         }
 
-        $this->options[CURLOPT_READFUNCTION] = static function ($ch, $fd, int $length) use ($stream): string {
+        $this->options[CURLOPT_READFUNCTION] = static function ($curlHandle, $inFile, int $length) use ($stream): string {
+            unset($curlHandle, $inFile); // required by cURL callback signature
             return $stream->eof() ? '' : $stream->read($length);
         };
 

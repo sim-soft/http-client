@@ -9,6 +9,7 @@ use Simsoft\HttpClient\Clients\Responses\OAuth2TokenResponse;
 use Simsoft\HttpClient\HttpClient;
 use Simsoft\HttpClient\Interfaces\StorageInterface;
 use Throwable;
+
 use function error_log;
 use function sprintf;
 
@@ -72,8 +73,8 @@ abstract class OAuth2
      * @param StorageInterface|null $storage Custom storage implementation. Defaults to FileStorage.
      */
     final public function __construct(
-        protected string  $clientId,
-        protected string  $clientSecret,
+        protected string $clientId,
+        protected string $clientSecret,
         ?StorageInterface $storage = null,
     )
     {
@@ -89,8 +90,8 @@ abstract class OAuth2
      * @return static
      */
     public static function request(
-        string            $clientId,
-        string            $clientSecret,
+        string $clientId,
+        string $clientSecret,
         ?StorageInterface $storage = null,
     ): static
     {

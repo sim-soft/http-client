@@ -21,8 +21,8 @@ final class TokenData
      * @param string|null $scope Granted scope string.
      */
     public function __construct(
-        public readonly string  $accessToken,
-        public readonly int     $expiresAt,
+        public readonly string $accessToken,
+        public readonly int    $expiresAt,
         public readonly ?string $refreshToken = null,
         public readonly ?string $tokenType = null,
         public readonly ?string $scope = null,

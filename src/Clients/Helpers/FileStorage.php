@@ -2,6 +2,7 @@
 
 namespace Simsoft\HttpClient\Clients\Helpers;
 
+use Simsoft\HttpClient\Clients\TokenData;
 use Simsoft\HttpClient\Interfaces\StorageInterface;
 
 /**
@@ -70,7 +71,7 @@ class FileStorage implements StorageInterface
             return null;
         }
 
-        return unserialize($contents);
+        return unserialize($contents, ['allowed_classes' => [TokenData::class]]);
     }
 
     /**
@@ -88,13 +89,13 @@ class FileStorage implements StorageInterface
     /**
      * Build the full file path for a given storage key.
      *
-     * Uses MD5 hash of the key to produce a safe, fixed-length filename.
+     * Uses SHA-256 hash of the key to produce a safe, fixed-length filename.
      *
      * @param string $key The storage key.
      * @return string The full file path.
      */
     private function filePath(string $key): string
     {
-        return $this->directory . DIRECTORY_SEPARATOR . md5($key) . '.token';
+        return $this->directory . DIRECTORY_SEPARATOR . hash('sha256', $key) . '.token';
     }
 }

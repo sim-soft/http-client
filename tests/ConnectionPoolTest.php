@@ -170,6 +170,8 @@ class ConnectionPoolTest extends TestCase
             'formData',
             'get',
             'getEndpoint',
+            'getMethod',
+            'getPoolSinkPath',
             'graphQL',
             'json',
             'macro',
@@ -217,13 +219,13 @@ class ConnectionPoolTest extends TestCase
 
         $this->assertSame($expectedMethods, $publicMethods);
 
-        // Explicitly verify buildHandle is the only pool-related public method
+        // Explicitly verify buildHandle and getPoolSinkPath are the only pool-related public methods
         $poolMethods = array_filter(
             $publicMethods,
             static fn(string $name): bool => str_contains($name, 'pool')
                 || str_contains($name, 'Pool')
         );
-        $this->assertEmpty($poolMethods, 'No pool management methods should be publicly exposed');
+        $this->assertSame(['getPoolSinkPath'], array_values($poolMethods), 'Only getPoolSinkPath should reference "pool" in its name');
     }
 
     /**

@@ -186,16 +186,30 @@ trait CurlOptionsTrait
         curl_setopt($handle, CURLOPT_ENCODING, ''); // Disable automatic encoding. Allow Gzip/Brotli compression
         curl_setopt($handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0); // Enable HTTP/2 as it allows multiplexing
         curl_setopt($handle, CURLOPT_DNS_CACHE_TIMEOUT, $this->dnsTimeout);
-        curl_setopt($handle, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
-        curl_setopt($handle, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS); // PHP 8.1 Security Fix. deprecated. Use CURLOPT_REDIR_PROTOCOLS_STR
 
-        //CURLOPT_REDIR_PROTOCOLS_STR => 'http,https', // Available PHP 8.3+
-        //181 => 'http,https', // Use constant value represent CURLOPT_REDIR_PROTOCOLS_STR for PHP <8.3
-        curl_setopt(
-            $handle,
-            defined('CURLOPT_REDIR_PROTOCOLS_STR') ? CURLOPT_REDIR_PROTOCOLS_STR : 181,
-            'http,https'
-        );
+        $this->applyProtocolRestrictions($handle);
+    }
+
+    /**
+     * Apply protocol restrictions using the appropriate cURL constants.
+     *
+     * Uses the newer _STR variants on PHP 8.3+ to avoid deprecation warnings,
+     * falling back to the legacy integer-based constants on older versions.
+     *
+     * @param CurlHandle $handle
+     * @return void
+     */
+    private function applyProtocolRestrictions(CurlHandle $handle): void
+    {
+        // CURLOPT_PROTOCOLS is deprecated in PHP 8.3+; use CURLOPT_PROTOCOLS_STR when available
+        $protocolsOption = defined('CURLOPT_PROTOCOLS_STR') ? CURLOPT_PROTOCOLS_STR : CURLOPT_PROTOCOLS;
+        $protocolsValue = defined('CURLOPT_PROTOCOLS_STR') ? 'http,https' : (CURLPROTO_HTTP | CURLPROTO_HTTPS);
+        curl_setopt($handle, $protocolsOption, $protocolsValue);
+
+        // CURLOPT_REDIR_PROTOCOLS is deprecated in PHP 8.3+; use CURLOPT_REDIR_PROTOCOLS_STR when available
+        $redirOption = defined('CURLOPT_REDIR_PROTOCOLS_STR') ? CURLOPT_REDIR_PROTOCOLS_STR : CURLOPT_REDIR_PROTOCOLS;
+        $redirValue = defined('CURLOPT_REDIR_PROTOCOLS_STR') ? 'http,https' : (CURLPROTO_HTTP | CURLPROTO_HTTPS);
+        curl_setopt($handle, $redirOption, $redirValue);
     }
 
     /**
@@ -211,7 +225,8 @@ trait CurlOptionsTrait
         $this->options[CURLOPT_FAILONERROR] = false;
         $this->options[CURLOPT_NOSIGNAL] = 1;
 
-        if (!isset($this->options[CURLOPT_FILE])
+        if (
+            !isset($this->options[CURLOPT_FILE])
             && !isset($this->options[CURLOPT_WRITEFUNCTION])
             && $this->returnTransfer
         ) {

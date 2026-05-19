@@ -5,6 +5,7 @@ namespace Simsoft\HttpClient\Clients;
 use Exception;
 use Simsoft\HttpClient\Clients\Helpers\SessionStorage;
 use Simsoft\HttpClient\Clients\Responses\SimpleOAuth2Response;
+use Simsoft\HttpClient\Clients\TokenData;
 use Simsoft\HttpClient\HttpClient;
 use Simsoft\HttpClient\Interfaces\StorageInterface;
 use Throwable;
@@ -49,8 +50,8 @@ abstract class SimpleOAuth2 extends HttpClient
      * @param StorageInterface|null $storage Custom storage. Defaults to SessionStorage.
      */
     final public function __construct(
-        protected string  $clientId,
-        protected string  $clientSecret,
+        protected string $clientId,
+        protected string $clientSecret,
         ?StorageInterface $storage = null,
     )
     {
@@ -66,8 +67,8 @@ abstract class SimpleOAuth2 extends HttpClient
      * @return static
      */
     public static function makeWith(
-        string            $clientId,
-        string            $clientSecret,
+        string $clientId,
+        string $clientSecret,
         ?StorageInterface $storage = null,
     ): static
     {
@@ -96,11 +97,11 @@ abstract class SimpleOAuth2 extends HttpClient
     {
         try {
             if ($this->storage->has($this->clientId)) {
-                /** @var SimpleOAuth2Response $token */
-                $token = $this->storage->get($this->clientId);
+                /** @var TokenData $tokenData */
+                $tokenData = $this->storage->get($this->clientId);
 
-                if (!$token->hasExpired()) {
-                    return $token->getToken();
+                if (!$tokenData->hasExpired()) {
+                    return $tokenData->accessToken;
                 }
 
                 // Token expired — remove it and fall through to acquire a new one
@@ -110,8 +111,9 @@ abstract class SimpleOAuth2 extends HttpClient
             $response = $this->postRequest();
 
             if ($response->ok()) {
-                $this->storage->set($this->clientId, $response);
-                return $response->getToken();
+                $tokenData = $this->toTokenData($response);
+                $this->storage->set($this->clientId, $tokenData);
+                return $tokenData->accessToken;
             }
 
             throw new Exception(sprintf(
@@ -119,7 +121,6 @@ abstract class SimpleOAuth2 extends HttpClient
                 $response->getStatusCode(),
                 $response->getMessage() ?? 'Unknown error'
             ));
-
         } catch (Throwable $throwable) {
             error_log(sprintf(
                 '[SimpleOAuth2] Failed to get access token for client "%s": %s',
@@ -129,5 +130,28 @@ abstract class SimpleOAuth2 extends HttpClient
         }
 
         return null;
+    }
+
+    /**
+     * Convert a SimpleOAuth2Response to a serializable TokenData value object.
+     *
+     * Applies a 30-second safety buffer to the expiry time to account for
+     * clock skew and network latency.
+     *
+     * @param SimpleOAuth2Response $response The parsed token response.
+     * @return TokenData
+     */
+    protected function toTokenData(SimpleOAuth2Response $response): TokenData
+    {
+        $expiresAt = $response->getExpiresAt();
+        $safeExpiresAt = $expiresAt ?? (time() + 3570);
+
+        return new TokenData(
+            accessToken: (string)$response->getToken(),
+            expiresAt: $safeExpiresAt,
+            refreshToken: $response->getRefreshToken(),
+            tokenType: $response->getTokenType(),
+            scope: $response->getScope(),
+        );
     }
 }

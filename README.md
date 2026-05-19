@@ -1,593 +1,375 @@
 # Simsoft HttpClient
 
-A fluent, production-grade PHP HTTP client built directly on the `curl_*`
-extension.
-It combines a zero-dependency core with full PSR compliance — giving you precise
-control over cURL behavior while remaining interoperable with any PSR-7/PSR-18
-compatible framework or library.
+A fluent PHP HTTP client built on `ext-curl` with zero runtime dependencies.
+PSR-7/PSR-18 compliant, concurrent requests, built-in retry, middleware, and
+test doubles — all in a single lightweight package.
 
-## Prerequisites
+```php
+$response = HttpClient::make()
+    ->withBaseUrl('https://api.example.com')
+    ->withBearerToken('YOUR_TOKEN')
+    ->get('/users', ['page' => 1]);
 
-- PHP **8.1** or higher
-- The `ext-curl` extension (enabled by default in most PHP distributions)
-- Composer
+echo $response->data('data.0.name'); // "John Doe"
+```
 
-## Strengths
+## Requirements
 
-- **Zero runtime overhead** — no deep object nesting, no hidden abstraction
-  layers.
-  The execution path from your call to the cURL handle is direct and auditable.
-- **Full PSR compliance** — implements PSR-7 (HTTP messages), PSR-18 (HTTP
-  client),
-  and supports PSR-17 factories and PSR-3 logging out of the box.
-- **Fluent API** — chainable methods read like natural language and require no
-  configuration objects or builder classes.
-- **Production-ready resilience** — built-in retry with exponential backoff,
-  customizable retry conditions, connection reuse, and HTTP/2 support.
-- **Precise cURL control** — every cURL option is accessible via
-  `withOptions()`,
-  buffer size is tunable, DNS cache timeout is configurable, and download
-  resumption
-  is handled automatically.
-- **Memory-efficient streaming** — large uploads and downloads use PSR-7
-  `StreamInterface` objects and cURL's native `CURLOPT_READFUNCTION`/
-  `CURLOPT_FILE`
-  rather than buffering the entire body in memory.
-- **Extensible middleware pipeline** — named, ordered middleware closures
-  intercept
-  both the request and response, enabling auth injection, caching, circuit
-  breaking,
-  and error normalization without touching core logic.
-- **Concurrent request execution** — `HttpPool` sends batches of requests via
-  `curl_multi_*` with a configurable sliding window, automatic HTTP/2
-  multiplexing, and per-response callbacks.
-- **Built-in test double** — `FakeHttpClient` provides request mocking, wildcard
-  pattern matching, response sequencing, and PHPUnit assertion methods — no
-  external mocking libraries needed.
+- PHP 8.1+
+- ext-curl
 
-## Comparison<a id="comparison"></a>
-
-| Feature                       | **Simsoft HttpClient**             | **Guzzle**                                 | **Symfony HttpClient**            | **Laravel HTTP Client** |
-|-------------------------------|------------------------------------|--------------------------------------------|-----------------------------------|-------------------------|
-| **PHP requirement**           | 8.1+                               | 7.2.5+                                     | 8.2+                              | 8.2+ (framework)        |
-| **Dependencies**              | `ext-curl` only                    | `psr/http-*`, `psr/log`, optional adapters | None (native PHP streams or curl) | Wraps Guzzle            |
-| **Architecture**              | Single class + traits, direct cURL | Handler stack, middleware, promises        | Contracts + multiple transports   | Facade over Guzzle      |
-| **PSR-18**                    | ✅                                  | ✅                                          | ✅ (adapter)                       | ❌ (Guzzle underneath)   |
-| **PSR-7**                     | ✅ (response)                       | ✅ (full)                                   | ❌ (own contracts)                 | ❌ (own contracts)       |
-| **Transport**                 | cURL directly                      | cURL or stream                             | cURL, stream, amphp               | Guzzle (cURL)           |
-| **HTTP/2**                    | ✅ native + multiplexing (HttpPool) | ✅ via cURL                                 | ✅ native + multiplexing           | ✅ via Guzzle            |
-| **Fluent API**                | ✅                                  | ❌ (options array)                          | ✅                                 | ✅                       |
-| **Middleware pipeline**       | ✅ named closures                   | ✅ HandlerStack                             | ✅ event listeners                 | ✅ (limited)             |
-| **Retry built-in**            | ✅ + custom callback                | Via middleware                             | ✅ RetryableHttpClient             | ✅                       |
-| **Async / concurrent**        | ✅ HttpPool (curl_multi)            | ✅ promises                                 | ✅ native                          | ✅ via Guzzle            |
-| **Streaming upload**          | ✅ StreamInterface                  | ✅                                          | ✅                                 | ✅                       |
-| **Streaming download**        | ✅ sink / sinkStream                | ✅                                          | ✅                                 | ✅                       |
-| **File attachments**          | ✅ CURLFile, path, resource, string | ✅                                          | ✅                                 | ✅                       |
-| **Response dot-notation**     | ✅ + wildcards                      | ❌                                          | ❌                                 | ❌                       |
-| **Request mocking / testing** | ✅ FakeHttpClient                   | ✅ MockHandler                              | ✅ MockHttpClient                  | ✅ Http::fake()          |
-| **Connection pooling**        | ✅ automatic handle reuse           | ✅                                          | ✅                                 | ✅ via Guzzle            |
-| **Standalone**                | ✅                                  | ✅                                          | ✅                                 | ❌ requires Laravel      |
-| **Install size**              | ⭐ Tiny                             | Medium                                     | Medium                            | Large (framework)       |
-| **Memory footprint**          | ⭐ Minimal                          | Moderate                                   | Low                               | Moderate + framework    |
-| **Learning curve**            | Low                                | Medium                                     | Medium                            | Low (Laravel only)      |
-
-### Key differentiators
-
-- **Simpler mental model** — One class, trait composition, no handler stacks or
-  DI containers. You chain methods and call `get()`/`post()`. No factory setup
-  is
-  needed.
-- **Zero-dependency core** — Only requires ext-curl. Guzzle pulls in 5+
-  packages;
-  Symfony needs its contracts package; Laravel needs the full framework.
-- **Dot-notation response access** — `$response->data('data.users.*.name')` with
-  wildcard support. Other clients require manual array traversal or separate
-  packages.
-- **Direct cURL control** — Every cURL option is accessible without abstraction
-  layers. Buffer sizes, DNS cache, download resumption, and HTTP/2 are all
-  first-class.
-- **Concurrent requests without promises** — `HttpPool::create()` gives you
-  concurrent execution via `curl_multi_*` with a sliding window, HTTP/2
-  multiplexing, and per-response callbacks — no promise chains or event loops.
-- **Built-in test double** — `FakeHttpClient` provides request mocking, pattern
-  matching, response sequencing, and PHPUnit assertions without extra packages.
-
-### Trade-offs
-
-- **No pluggable transports** — locked to cURL. This is intentional: cURL is
-  available everywhere PHP runs, and single transport means zero adapter
-  complexity, predictable behavior, and direct access to every cURL option.
-  Adding stream or amphp backends would introduce abstraction layers that
-  contradict the library's "direct and auditable" philosophy.
-- **No promise-based async** — concurrent requests use `curl_multi` polling, not
-  promises. In PHP's short-lived request lifecycle, promises are syntactic sugar
-  over the same `curl_multi_exec` loop. They add object allocations, callback
-  chains, and event loop concepts without providing true non-blocking I/O.
-  `HttpPool::create()->send($requests)` is more explicit about what actually
-  happens.
-
-### When to choose each
-
-| Choose                 | When                                                                                                                                                                                          |
-|------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Simsoft HttpClient** | Standalone microservices, CLI tools, or libraries where you want minimal dependencies, full cURL control, concurrent requests, built-in testing, and a fluent API without framework overhead. |
-| **Guzzle**             | You need promise-based async, broad ecosystem support, or are already in a Guzzle-dependent stack.                                                                                            |
-| **Symfony HttpClient** | You need multiple transport backends (amphp, native streams), or are in a Symfony project.                                                                                                    |
-| **Laravel HTTP**       | You're in Laravel and want the framework's testing fakes and collection integration.                                                                                                          |
-
-## Usage Guide
-1. [Installation](#installation)
-2. [Basic Usage](#basic_usage)
-3. [Sending Request](#sending_requests)
-4. [Post Request](#post_requests)
-5. [Set Headers](#set_headers)
-6. [Set CURL options](#set_curl_options)
-7. [Useful Methods](#useful_methods)
-8. [Upload File](#upload)
-9. [Download File](#download)
-10. [Retry Failed Request](#retry)
-11. [Logging](#logging)
-12. [Middleware Usage](#middleware)
-13. [Response Handling With Dot-notation](#response_handling)
-14. [Response Body](#response_body)
-15. [Create Custom SDK](docs/CUSTOM_SDK.md)
-    1. [Create SDK Client](docs/CUSTOM_SDK.md)
-    2. [Create SDK Response](docs/CUSTOM_SDK.md)
-16. [OAuth2 Authentication](docs/OAUTH2.md)
-17. [PSR-18 Usage](docs/PSR18.md)
-18. [Macro](docs/MACRO.md)
-19. [Concurrent Requests (HttpPool)](docs/POOL.md)
-20. [Testing with FakeHttpClient](docs/TESTING.md)
-
-## Install<a id="installation"></a>
+## Install
 
 ```shell
 composer require simsoft/http-client
 ```
-## Basic Usage<a id="basic_usage"></a>
-```php
-require "vendor/autoload.php";
 
+---
+
+## Table of Contents
+
+### Getting Started
+
+- [Quick Start](#quick-start)
+- [Sending Requests](#sending-requests)
+- [Request Bodies](#request-bodies)
+
+### Configuration
+
+- [Headers](#headers)
+- [Timeouts & cURL Options](#timeouts--curl-options)
+- [Authentication](#authentication)
+
+### Responses
+
+- [Status Checks](#status-checks)
+- [Reading Data (Dot-notation)](#reading-data)
+- [Response Body (Stream)](#response-body)
+
+### File Transfer
+
+- [Uploading Files](#uploading-files)
+- [Downloading Files](#downloading-files)
+
+### Resilience
+
+- [Retry](#retry)
+- [Middleware](docs/MIDDLEWARE.md)
+
+### Advanced
+
+- [Concurrent Requests (HttpPool)](docs/POOL.md)
+- [OAuth2 Authentication](docs/OAUTH2.md)
+- [PSR-18 Interoperability](docs/PSR18.md)
+- [Custom SDK / Response Classes](docs/CUSTOM_SDK.md)
+- [Macro & Mixin](docs/MACRO.md)
+- [Testing with FakeHttpClient](docs/TESTING.md)
+- [Logging](#logging)
+- [Debugging](#debugging)
+
+### Reference
+
+- [Comparison with Other Libraries](docs/COMPARISON.md)
+
+---
+
+## Quick Start
+
+```php
 use Simsoft\HttpClient\HttpClient;
 
-$response = HttpClient::make()
-     ->withBaseUrl('https://api.domain.com/api')
-     ->withBearerToken('YOUR_TOKEN')
-     ->get('/users', [
-        'page' => 1,
-        'limit' => 10,
-     ]);
+$client = HttpClient::make()->withBaseUrl('https://api.example.com');
 
-echo $response->getStatusCode() . PHP_EOL;
+// GET with query params
+$response = $client->get('/users', ['page' => 1, 'limit' => 10]);
 
+// Check status and read JSON
 if ($response->ok()) {
-    //{"status": 200, "data": [{"name": "John Doe","gender": "m"},{"name": "Jane Doe","gender": "f"}]}
-    echo $response->data('status') . PHP_EOL;
-    echo $response->data('data.0.name') . PHP_EOL;
-    echo $response->data('data.1.name') . PHP_EOL;
-} else {
-    // {"errors": {"status": 404, "title": "The resource was not found"}}
-    echo $response->data('errors.status') . PHP_EOL;
-    echo $response->data('errors.title') . PHP_EOL;
+    $users = $response->data('data');          // array of users
+    $names = $response->data('data.*.name');   // ["John", "Jane"]
 }
-
-// Output:
-200
-John Doe
-Jane Doe
 ```
 
-## Sending Requests<a id="sending_requests"></a>
+## Sending Requests
+
 ```php
-use Simsoft\HttpClient\HttpClient;
+$client = HttpClient::make()->withBaseUrl('https://api.example.com');
 
-$client = new HttpClient();
-$client->withBaseUrl('https://api.domain.com/api');
+$response = $client->get('/users');
+$response = $client->get('/users', ['status' => 'active']);
 
-$response = $client->get('/resource'); // Perform GET request.
-$response = $client->get('/resource', ['foo' => 'bar', 'foo1' => 'bar2']); // GET with query params:foo=bar&foo1=bar2
-
-$response = $client->put('/resource', ['id' => 1, 'name' => 'updated']); // Perform PUT request.
-$response = $client->patch('/resource', ['id' => 1]); // Perform PATCH request.
-$response = $client->delete('/resource', ['id' => 2]); // Perform DELETE request.
+$response = $client->post('/users', ['name' => 'Alice']);
+$response = $client->put('/users/1', ['name' => 'Bob']);
+$response = $client->patch('/users/1', ['email' => 'bob@example.com']);
+$response = $client->delete('/users/1');
 ```
 
-## Post Requests<a id="post_requests"></a>
+## Request Bodies
+
 ```php
-use Simsoft\HttpClient\HttpClient;
+$client = HttpClient::make()->withBaseUrl('https://api.example.com');
 
-$client = new HttpClient();
-$client->withBaseUrl('https://api.domain.com');
+// JSON (application/json)
+$client->withJson(['name' => 'Alice'])->post('/users');
+$client->asJson()->post('/users', ['name' => 'Alice']);  // shorthand
 
-$response = $client->withMultipart(['foo' => 'bar', 'baz' => 'qux'])->post('/user'); // Perform form-data post
-$response = $client->asMultipart()->post('/user', ['foo' => 'bar', 'baz' => 'qux']); // Perform form-data post
-$response = $client->post('/user', ['foo' => 'bar', 'baz' => 'qux']); // Perform form-data post
+// Form URL-encoded (application/x-www-form-urlencoded)
+$client->withForm(['email' => 'a@b.com'])->post('/login');
+$client->asForm()->post('/login', ['email' => 'a@b.com']);
 
-$response = $client->withForm(['foo' => 'bar', 'baz' => 'qux'])->post('/user'); // Perform x-www-form-urlencoded post
-$response = $client->asForm()->post('/user', ['foo' => 'bar', 'baz' => 'qux']); // Perform x-www-form-urlencoded post
+// Multipart form-data
+$client->withMultipart(['field' => 'value'])->post('/upload');
+$client->post('/upload', ['field' => 'value']);  // default for POST arrays
 
-$response = $client->withJson(['foo' => 'bar', 'baz' => 'qux'])->post('/user'); // JSON content request
-$response = $client->asJson()->post('/user', ['foo' => 'bar', 'baz' => 'qux']); // JSON content request
+// Raw body
+$client->withRaw('<xml>data</xml>', 'application/xml')->post('/endpoint');
 
-$response = $client->withRaw('hello world')->post('/user'); // Raw text/plain content request
-$response = $client->withRaw('<xml>data</xml>', 'application/xml')->post('/user'); // Raw XML content request
-$response = $client->asRaw()->post('/user', 'hello world'); // Raw text/plain content request
+// Stream body (client takes ownership, closes after request)
+$client->withBodyStream(new MyStream(), 'application/pdf')->post('/upload');
 
-// Note: The client takes ownership of the stream and will close it after the request is complete.
-// Do not reuse the stream after this call.
-// For streams, you want to manage yourself, use withBody() instead.
-$response = $client->withBodyStream(new MyStream())->post('/user'); // Post a stream.
-$response = $client->withBodyStream(new MyPdfStream(), 'application/pdf')->post('/user'); // Post a PDF stream
-$response = $client->withBodyStream(new MyVideoStream(), 'video/mp4')->post('/user'); // Post a video stream.
-
- // GraphQL request.
-$response = $client->withGraphQL('
-        query GetUser($id: ID!) {
-          user(id: $id) {
-            id
-            name
-          }
-        }', ['id' => 123])
-        ->post('/resource');
+// GraphQL
+$client->withGraphQL('query { users { name } }', ['limit' => 10])->post('/graphql');
 ```
 
-## Set Headers<a id="set_headers"></a>
-```php
-use Simsoft\HttpClient\HttpClient;
+## Headers
 
+```php
 $response = HttpClient::make()
-    ->withBaseUrl('https://domain.com/api')
-    ->withHeader('x-Author', 'John Doe')
+    ->withBaseUrl('https://api.example.com')
+    ->withHeader('X-Custom', 'value')
     ->withHeaders([
         'Accept' => 'application/json',
-        'X-App-Version' => '1.0.0',
+        'X-App-Version' => '2.0',
     ])
-    ->post('/resource', ['foo' => 'bar']);
+    ->get('/data');
 ```
 
-## Set CURL options<a id="set_curl_options"></a>
-```php
-use Simsoft\HttpClient\HttpClient;
+## Timeouts & cURL Options
 
-$client = new HttpClient();
-$response = $client
-    ->withBaseUrl('https://domain.com/api')
-    ->withOptions([
-        CURLOPT_CONNECTTIMEOUT_MS => 2000, // 2 seconds
-        CURLOPT_TIMEOUT_MS => 5000, // 5 seconds
+```php
+$response = HttpClient::make()
+    ->timeout(30)              // execution timeout (seconds)
+    ->connectionTimeout(5)     // connection timeout (seconds)
+    ->withoutVerifying()       // disable TLS verification (dev only)
+    ->verbose()                // enable cURL verbose output
+    ->withOptions([            // any cURL constant
+        CURLOPT_MAXREDIRS => 3,
     ])
-    ->post('/resource', ['foo' => 'bar']);
+    ->get('https://api.example.com/data');
 ```
 
-## Useful methods<a id="useful_methods"></a>
+## Authentication
 
 ```php
-use Simsoft\HttpClient\HttpClient;
+// Bearer token
+$client = HttpClient::make()->withBearerToken('YOUR_TOKEN');
 
-$response = HttpClient::make()
-    ->withBaseUrl('https://domain.com/api')
-
-    ->withBearerToken('YOUR_TOKEN') // set header Bearer YOUR_TOKEN
-
-    ->timeout(30) // Request timeout in seconds (CURLOPT_TIMEOUT).
-
-    ->connectionTimeout(5) // Connection timeout in seconds (CURLOPT_CONNECTTIMEOUT).
-
-    ->withoutVerifying() // Disable TLS certificates verify.
-
-    ->withoutReturnTransfer() // Disable return transfer.
-
-    ->verbose() // Enable verbose mode
-
-    ->post('/resource', ['foo' => 'bar']);
+// For OAuth2 flows, see docs/OAUTH2.md
 ```
 
-### dump() vs dd() for Debugging
+---
+
+## Status Checks
 
 ```php
-// dd() — dumps current state and immediately exits. Use during development.
-HttpClient::make()
-    ->withBaseUrl('https://domain.com/api')
-    ->withJson(['foo' => 'bar'])
-    ->dd()
-    ->post('/resource', ['foo' => 'bar']); // triggers execution — dumps full state then exits before request send.
+$response->ok();              // 200
+$response->created();         // 201
+$response->noContent();       // 204
+$response->successful();      // 2xx
 
-// dump() — dumps state inside the request pipeline after prepareHandle(),
-// then continues and completes the request. Use to inspect the fully built state.
-$response = HttpClient::make()
-    ->withBaseUrl('https://domain.com/api')
-    ->dump()
-    ->post('/resource', ['foo' => 'bar']); // request still fires
+$response->badRequest();      // 400
+$response->unauthorized();    // 401
+$response->forbidden();       // 403
+$response->notFound();        // 404
+$response->tooManyRequests(); // 429
+$response->isClientError();   // 4xx
+
+$response->isServerError();   // 5xx
+$response->isNetworkError();  // cURL error (timeout, DNS, etc.)
+$response->failed();          // 4xx or 5xx or network error
+
+$response->getStatusCode();   // int
+$response->getMessage();      // reason phrase or cURL error
+$response->getTotalTime();    // float (seconds)
 ```
 
-## Upload File<a id="upload"></a>
+## Reading Data
 
-Upload a single file
+Access JSON response data using dot-notation with wildcard support:
+
 ```php
-use Simsoft\HttpClient\HttpClient;
+// Given: {"status": 200, "data": [{"name": "John"}, {"name": "Jane"}]}
 
-$client = HttpClient::make()->withBaseUrl('https://domain.com/api/upload');
+$response->data();                // full decoded array
+$response->data('status');        // 200
+$response->data('data.0.name');   // "John"
+$response->data('data.*.name');   // ["John", "Jane"]
+$response->data('missing', 'default'); // "default"
 
-// Attach CURLFile object. (Recommended)
-$response = $client->attach('file', new CURLFile('path/to/file.pdf'))->post();
-
-// Note: Upload with a custom filename & MIME type.
-// attach (field name, file path|CURLFile, file name, mime type)
-// In practice, use only one per request unless your API accepts multiple fields.
-
-// Upload a file from a stream resource
-$response = $client->attach('attachment', fopen('path/to/file.pdf', 'r'), 'file.pdf', 'application/pdf')->post();
-
-// Upload a file via a path
-$response = $client->attach('document', 'path/to/file.pdf', 'file.pdf', 'application/pdf')->post();
-
-// Upload from string.
-$response = $client->attach('file', 'Hello world, file content here', 'note.txt')->post();
+$response->json();    // decoded array (same as data())
+$response->object();  // decoded as stdClass
+$response->toArray(); // decoded array
 ```
 
-Upload multiple files.
+Headers:
 
 ```php
-use Simsoft\HttpClient\HttpClient;
-
-$client = HttpClient::make()->withBaseUrl('https://domain.com/api/upload')
-
-// Upload CURLFile objects. (Recommended)
-$response = $client->attach('files', [
-        new CURLFile('path/to/file1.pdf'),
-        new CURLFile('path/to/file2.pdf'),
-    ])->post();
-
-// or upload files from resources
-$response = $client->attach('documents', [
-        fopen('path/to/file1.pdf', 'r'),
-        fopen('path/to/file2.pdf', 'r'),
-    ], 'file.pdf')->post();
-
-// or upload files from paths
-$response = $client->attach('attachments', [
-        'path/to/file1.pdf',
-        'path/to/file2.pdf',
-    ], 'file.pdf')->post();
+$response->getHeaders();                  // all headers
+$response->getHeaderLine('Content-Type'); // "application/json"
+$response->hasHeader('X-Request-Id');     // bool
 ```
 
-## Download File<a id="download"></a>
+## Response Body
 
-Download a file to disk (uses `CURLOPT_FILE` internally).
+The body implements `Psr\Http\Message\StreamInterface`:
 
 ```php
-use Simsoft\HttpClient\HttpClient;
+// Quick access
+$raw = $response->body();       // string
+$raw = $response->getRaw();     // same
+$raw = (string) $response->getBody();
 
-HttpClient::make()
-    ->sink('path/to/file.zip')
-    ->get('https://example.com/file.zip');
+// Stream operations
+$body = $response->getBody();
+$body->getSize();
+$body->getContents();
+$body->rewind();
+
+// Chunked reading
+while (!$body->eof()) {
+    echo $body->read(8192);
+}
 ```
 
-Stream download to a file handle (uses `CURLOPT_WRITEFUNCTION` internally).
+---
+
+## Uploading Files
+
+Single file:
 
 ```php
-use Simsoft\HttpClient\HttpClient;
+$client = HttpClient::make()->withBaseUrl('https://api.example.com');
 
-$fp = fopen('php://output', 'wb');
-// or $fp = fopen('path/to/file.zip', 'wb');
-HttpClient::make()
-    ->sinkStream($fp)
-    ->get('https://example.com/file.zip');
+// CURLFile (recommended)
+$client->attach('file', new CURLFile('path/to/doc.pdf'))->post('/upload');
+
+// From path with custom name and MIME
+$client->attach('doc', 'path/to/doc.pdf', 'report.pdf', 'application/pdf')->post('/upload');
+
+// From resource
+$client->attach('file', fopen('path/to/doc.pdf', 'r'), 'doc.pdf')->post('/upload');
+
+// From string content
+$client->attach('file', 'file content here', 'note.txt', 'text/plain')->post('/upload');
+```
+
+Multiple files:
+
+```php
+$client->attach('files', [
+    new CURLFile('path/to/file1.pdf'),
+    new CURLFile('path/to/file2.pdf'),
+])->post('/upload');
+```
+
+## Downloading Files
+
+```php
+// Direct to file (CURLOPT_FILE)
+HttpClient::make()->sink('path/to/output.zip')->get('https://example.com/file.zip');
+
+// Stream-based (CURLOPT_WRITEFUNCTION) — for progress tracking or piping
+$fp = fopen('path/to/output.zip', 'wb');
+HttpClient::make()->sinkStream($fp)->get('https://example.com/file.zip');
 fclose($fp);
 ```
 
-Both methods accept a file path (string) or an open resource handle.
+---
 
-## Retry Failed Request<a id="retry"></a>
-
-> Imports (`use Simsoft\HttpClient\HttpClient`) are omitted in the examples
-> below for brevity.
+## Retry
 
 ```php
-use Simsoft\HttpClient\HttpClient;
+// Retry 3 times with no delay
+$response = HttpClient::make()->retry(3)->get('https://api.example.com/data');
 
-$client = new HttpClient();
-$client->withBaseUrl('https://domain.com/api/endpoint');
-
-$response = $client->retry(3)->get(); // Retry 3 times. No wait in between attempts.
-
-$response = $client->retry(3, after: 500)->get(); // Retry 3 times, wait 500ms between attempts.
-$response = $client->retry(3, after: 2000)->get(); // Retry 3 times, wait 2 seconds between attempts.
-// Note: the second argument is in milliseconds.
+// Retry 3 times, 500ms between attempts
+$response = HttpClient::make()->retry(3, after: 500)->get('https://api.example.com/data');
 ```
 
-### Using retryWhen() to customize retry logic.
-
-Example: Retry only network-level errors, never double-submit on 5xx.
+Custom retry conditions with `retryWhen()`:
 
 ```php
 use Simsoft\HttpClient\Response;
 
-HttpClient::make()
-    ->retry(3, after: 500)
-    ->retryWhen(function(Response $response, string $method, int $attempt): bool {
-        // Only retry network-level failures, never server errors on POST
+$response = HttpClient::make()
+    ->retry(4)
+    ->retryWhen(function (Response $response, string $method, int $attempt): bool {
+        // Retry on 429 with Retry-After header
+        if ($response->getStatusCode() === 429) {
+            $wait = (int) $response->getHeaderLine('retry-after');
+            sleep(max(1, $wait));
+            return true;
+        }
         return $response->isRetryableNetworkError();
     })
-    ->withJson(['order_id' => 123])
-    ->post('https://api.example.com/orders');
+    ->get('https://api.example.com/search');
 ```
 
-Example: Exponential backoff with jitter
+Exponential backoff:
 
 ```php
-use Simsoft\HttpClient\Response;
-
 HttpClient::make()
     ->retry(5)
-    ->retryWhen(function(Response $response, string $method, int $attempt): bool {
+    ->retryWhen(function (Response $response, string $method, int $attempt): bool {
         if (!$response->isServerError() && !$response->isRetryableNetworkError()) {
             return false;
         }
-
-        // Exponential backoff: 100ms, 200ms, 400ms, 800ms...
+        // 100ms, 200ms, 400ms, 800ms... with ±20% jitter
         $delay = (int) (100 * (2 ** ($attempt - 1)));
-        // Add jitter ±20% to avoid thundering herd
         $jitter = (int) ($delay * 0.2);
-        $sleep = $delay + random_int(-$jitter, $jitter);
-        usleep($sleep * 1000);
-
+        usleep(($delay + random_int(-$jitter, $jitter)) * 1000);
         return true;
     })
-    ->get('https://api.example.com/reports/summary');
+    ->get('https://api.example.com/reports');
 ```
 
-Example: Retry on specific HTTP status codes (e.g., 429 Too Many Requests)
+## Logging
 
 ```php
-use Simsoft\HttpClient\Response;
-
-HttpClient::make()
-    ->withBaseUrl('https://api.example.com')
-    ->retry(4)
-    ->retryWhen(function(Response $response, string $method, int $attempt): bool {
-        // Respect Retry-After header on 429
-        if ($response->getStatusCode() === 429) {
-            $retryAfter = (int) $response->getHeaderLine('retry-after');
-            sleep(max(1, $retryAfter));
-            return true;
-        }
-
-        return $response->isRetryableNetworkError();
-    })
-    ->get('/search');
-```
-
-## Logging<a id="logging"></a>
-
-Set logger Psr\Log\LoggerInterface;
-
-```php
-use Simsoft\HttpClient\HttpClient;
 use Monolog\Logger;
 
-$logger = new Logger('app');
-
 $response = HttpClient::make()
-    ->withLogger($logger) // Log with LoggerInterface.
-    ->post('https://domain.com/api/endpoint', ['foo' => 'bar']);
+    ->withLogger(new Logger('http'))  // any PSR-3 LoggerInterface
+    ->get('https://api.example.com/data');
 ```
 
-## Middleware Usage<a id="middleware"></a>
+Logs method, URL, status, duration, and errno for every request. Errors are
+logged at `error` level automatically.
 
-Add middleware to the request pipeline. The middleware must be a callable that
-accepts a request instance and a closure and returns a response instance.
-More examples can be found in [Middleware Examples](docs/MIDDLEWARE.md)
+## Debugging
 
 ```php
-use Closure;
-use Simsoft\HttpClient\HttpClient;
-use Simsoft\HttpClient\Response;
+// dump() — prints request state, then continues execution
+$response = HttpClient::make()->dump()->post('https://api.example.com/data', ['foo' => 'bar']);
 
-$client = HttpClient::make()
-    ->withBaseUrl('https://api.example.com')
-
-     // withMiddleware(Closure, middleware_name) middleware_name is optional.
-     // The closure receives 2 arguments: the request object and the next middleware.
-     // It must return a Response instance.
-    ->withMiddleware(function (HttpClient $request, Closure $next): Response {
-        // Modify the request before it is sent
-        $request->withHeader('X-Custom-Header', 'Custom Value');
-
-        $response = $next();
-        // Inspect or modify the response after it is received
-        return $response;
-    }, 'my-middleware')
-    ->get('/users');
+// dd() — prints request state and exits immediately
+HttpClient::make()->dd()->post('https://api.example.com/data', ['foo' => 'bar']);
 ```
 
-## Response Handling With Dot-notation<a id="response_handling"></a>
+---
 
-```php
-use Simsoft\HttpClient\HttpClient;
+## Advanced Topics
 
-$response = HttpClient::make()
-               ->withBaseUrl('https://domain.com/api')
-               ->post('/users', ['foo' => 'bar']);
-
-print_r($response->getHeaders()); // Get all headers.
-// output
-[
-    'content-type' => 'application/json',
-    'cache-control' => 'no-cache',
-]
-
-echo $response->getHeaderLine('content-type'); // output: application/json
-echo $response->getStatusCode(); // output: 200.
-echo $response->getTotalTime(); // output: 0.0112 (seconds, e.g. 11.2ms).
-
-if ($response->ok()) {  // Or $response->successful() for 2xx status codes.
-
-    // Output: {"status": 200, "total_records": 2034 "data": [{"name": "John Doe","gender": "m"},{"name": "Jane Doe","gender": "f"}]}
-    echo (string) $response->getBody(); // Get raw body
-
-    // Convert to object
-    $users = $response->object();
-    echo $users->status . PHP_EOL;
-    echo $users->total_records . PHP_EOL;
-    foreach($users->data as $user) {
-        echo $user->name . PHP_EOL;
-        echo $user->gender . PHP_EOL;
-    }
-
-    //  {"status": 200, "data": [{"name": "John Doe","gender": "m"},{"name": "Jane Doe","gender": "f"}]}
-    $data = $response->data(); // Get full decoded array. Equivalent to $response->toArray()
-    echo $data['status'] . PHP_EOL;
-    echo $data['data'][0]['name'] . PHP_EOL;
-    echo $data['data'][1]['name'] . PHP_EOL;
-
-    // Support Dot-notation
-    echo $response->data('status') . PHP_EOL;       // 200
-    echo $response->data('data.0.name') . PHP_EOL;  // 'John Doe'
-    echo $response->data('data.1.name') . PHP_EOL;  // 'Jane Doe'
-
-    // output all names using wildcard.
-    foreach($response->data('data.*.name') as $name) {
-        echo $name . PHP_EOL;
-    }
-
-} elseif ($response->failed()) { // for 4xx or 5xx or network error.
-
-    echo $response->isNetworkError() ? 'Network Error' : 'Not Network Error';
-    echo $response->isServerError() ? 'Server Error' : 'Not Server Error';
-    echo $response->isClientError() ? 'Client Error' : 'Not Client Error';
-
-    echo $response->getMessage() . PHP_EOL;
-
-    // {"errors": {"status": 404, "title": "The resource was not found"}}
-    echo $response->data('errors.status') . PHP_EOL;
-    echo $response->data('errors.title') . PHP_EOL;
-}
-```
-
-## Response Body<a id="response_body"></a>
-
-The response body is an instance of Psr\Http\Message\StreamInterface.
-
-```php
-// 3 ways to get a raw body.
-$raw = (string) $response->getBody();
-$raw = $response->body();
-$raw = $response->getRaw();
-
-$body = $response->getBody();
-echo $body->getSize(); // Get the size before reading.
-echo $body->getContents(); // Read body full contents.
-
-// Rewind the body to the beginning before read again.
-$body->rewind();
-echo $body->getContents();
-
-// Incrementally read the body.
-while (!$body->eof()) {
-    echo $body->read(1024);
-}
-```
+| Topic                               | Description                                                                        |
+|-------------------------------------|------------------------------------------------------------------------------------|
+| [Concurrent Requests](docs/POOL.md) | Execute requests in parallel with HttpPool, sliding window, retries, and callbacks |
+| [OAuth2](docs/OAUTH2.md)            | Client credentials, authorization code with PKCE, token caching and refresh        |
+| [PSR-18](docs/PSR18.md)             | Use as a drop-in PSR-18 client with any PSR-17 factory                             |
+| [Custom SDK](docs/CUSTOM_SDK.md)    | Build typed SDK clients and response classes                                       |
+| [Macro & Mixin](docs/MACRO.md)      | Add methods at runtime without subclassing                                         |
+| [Middleware](docs/MIDDLEWARE.md)    | Auth injection, caching, circuit breaking, logging, error normalization            |
+| [Testing](docs/TESTING.md)          | FakeHttpClient with pattern matching, sequencing, and PHPUnit assertions           |
 
 ## License
-The Simsoft HttpClient is licensed under the MIT License. See the [LICENSE](LICENSE) file for details
+
+MIT — see [LICENSE](LICENSE)
