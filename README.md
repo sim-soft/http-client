@@ -24,6 +24,11 @@ echo $response->data('data.0.name'); // "John Doe"
 composer require simsoft/http-client
 ```
 
+## Documentation
+
+Full documentation is available at
+[sim-soft.github.io/http-client](https://sim-soft.github.io/http-client/).
+
 ---
 
 ## Table of Contents
