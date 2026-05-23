@@ -254,4 +254,4 @@ $response = $client->get('/dashboard');
 - [OAuth2 via Middleware](OAUTH2.md#oauth2-httpclient) — auto-inject tokens
 - [Testing Middleware](TESTING.md) — mock requests with FakeHttpClient
 - [Concurrent Requests](POOL.md) — execute requests in parallel
-- [← Back to README](../README.md)
+- [← Back to README](/)

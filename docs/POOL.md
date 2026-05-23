@@ -705,4 +705,4 @@ $result = HttpPool::create()->send($requests);
 - [Testing Pools](TESTING.md) — use FakeHttpClient with HttpPool
 - [Middleware](MIDDLEWARE.md) — intercept requests/responses
 - [OAuth2](OAUTH2.md) — authenticate pooled requests via middleware
-- [← Back to README](../README.md)
+- [← Back to README](/)
