@@ -115,4 +115,4 @@ $sdk = new SomeApiSdk(httpClient: $client);
 
 - [Custom SDK](CUSTOM_SDK.md) — build typed SDK clients
 - [Testing](TESTING.md) — mock PSR-18 requests
-- [← Back to README](../README.md)
+- [← Back to README](/)

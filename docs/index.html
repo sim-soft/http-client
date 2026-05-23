@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Simsoft HttpClient — Fluent PHP HTTP Client with cURL, OAuth2, Retry & Middleware</title>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
+
+    <!-- SEO Meta -->
+    <meta name="description"
+          content="Simsoft HttpClient is a fluent, zero-dependency PHP HTTP client built on ext-curl. Features OAuth2, retry with backoff, middleware pipeline, concurrent requests via HttpPool, PSR-7/PSR-18 compliance, and built-in test doubles.">
+    <meta name="keywords"
+          content="PHP HTTP client, cURL PHP, PSR-18, PSR-7, OAuth2 PHP, HTTP pool, concurrent requests PHP, retry PHP, middleware PHP, fluent API, REST client PHP, file upload PHP, streaming download PHP, FakeHttpClient, PHPUnit HTTP mock">
+    <meta name="author" content="Simsoft">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://sim-soft.github.io/http-client/">
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Simsoft HttpClient — Fluent PHP HTTP Client">
+    <meta property="og:description"
+          content="A zero-dependency PHP HTTP client with fluent API, OAuth2, retry, middleware, concurrent requests, and built-in test doubles. PSR-7/PSR-18 compliant.">
+    <meta property="og:url" content="https://sim-soft.github.io/http-client/">
+    <meta property="og:image" content="https://sim-soft.github.io/http-client/img/simsoft.webp">
+    <meta property="og:site_name" content="Simsoft HttpClient Documentation">
+    <meta property="og:locale" content="en_US">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Simsoft HttpClient — Fluent PHP HTTP Client">
+    <meta name="twitter:description"
+          content="Zero-dependency PHP HTTP client with OAuth2, retry, middleware, concurrent requests, and PSR-7/PSR-18 compliance.">
+    <meta name="twitter:image" content="https://sim-soft.github.io/http-client/img/simsoft.webp">
+
+    <!-- Structured Data (JSON-LD) -->
+    <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "SoftwareSourceCode",
+            "name": "Simsoft HttpClient",
+            "description": "A fluent, zero-dependency PHP HTTP client built on ext-curl with OAuth2, retry, middleware, concurrent requests, and PSR-7/PSR-18 compliance.",
+            "url": "https://sim-soft.github.io/http-client/",
+            "codeRepository": "https://github.com/sim-soft/http-client",
+            "programmingLanguage": {
+                "@type": "ComputerLanguage",
+                "name": "PHP"
+            },
+            "runtimePlatform": "PHP 8.1+",
+            "license": "https://opensource.org/licenses/MIT",
+            "author": {
+                "@type": "Organization",
+                "name": "Simsoft",
+                "url": "https://github.com/sim-soft"
+            },
+            "keywords": [
+                "PHP",
+                "HTTP client",
+                "cURL",
+                "PSR-18",
+                "PSR-7",
+                "OAuth2",
+                "middleware",
+                "retry",
+                "concurrent requests"
+            ],
+            "applicationCategory": "DeveloperApplication",
+            "operatingSystem": "Cross-platform"
+        }
+    </script>
+
+    <!-- Theme -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify-darklight-theme@latest/dist/style.min.css"
+          title="docsify-darklight-theme" type="text/css">
+    <style>
+        .logo-text {
+            color: inherit !important;
+        }
+    </style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+    window.$docsify = {
+        name: 'Simsoft HttpClient',
+        nameLink: 'https://sim-soft.github.io/http-client/',
+        repo: 'https://github.com/sim-soft/http-client',
+        loadSidebar: true,
+        subMaxLevel: 0,
+        auto2top: true,
+        search: {
+            placeholder: 'Search documentation',
+            noData: 'No results found',
+            depth: 3
+        },
+        darklightTheme: {
+            defaultTheme: 'light',
+            siteFont: 'Source Sans Pro, Helvetica Neue, Arial, sans-serif',
+            codeFontFamily: 'JetBrains Mono, Roboto Mono, Monaco, courier, monospace',
+            dark: {
+                accent: '#E8960C',
+                toogleBackground: '#1a1a2e',
+                background: '#1a1a2e',
+                textColor: '#e0e0e0',
+                codeBackgroundColor: '#0d1117'
+            },
+            light: {
+                accent: '#C47A08',
+                toogleBackground: '#fff',
+                background: '#fff',
+                textColor: '#1a1a1a',
+                codeBackgroundColor: '#f6f8fa'
+            }
+        }
+    };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docsify-darklight-theme@latest/dist/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/plugins/search.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-php.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-json.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docsify-copy-code@2/dist/docsify-copy-code.min.js"></script>
+<script>
+    window.$docsify.plugins = (window.$docsify.plugins || []).concat(function (hook) {
+        hook.doneEach(function () {
+            var title = document.querySelector('.markdown-section h1');
+            document.title = 'Simsoft HttpClient' + (title ? ' - ' + title.textContent : '');
+        });
+    });
+</script>
+</body>
+</html>

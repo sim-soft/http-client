@@ -685,4 +685,4 @@ storage.
 - [Middleware](MIDDLEWARE.md) — inject OAuth2 tokens automatically
 - [Custom SDK](CUSTOM_SDK.md) — build authenticated SDK clients
 - [Testing](TESTING.md) — mock OAuth2-protected endpoints
-- [← Back to README](../README.md)
+- [← Back to README](/)

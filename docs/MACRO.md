@@ -176,4 +176,4 @@ $client = HttpClient::make()
 
 - [Custom SDK](CUSTOM_SDK.md) — full subclass approach for typed APIs
 - [Middleware](MIDDLEWARE.md) — intercept requests without macros
-- [← Back to README](../README.md)
+- [← Back to README](/)
