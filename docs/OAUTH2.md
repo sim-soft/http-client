@@ -17,14 +17,16 @@ refreshing expired tokens, and acquiring new ones as needed.
 3. [Sandbox Mode](#oauth2-sandbox)
 4. [Custom Scope](#oauth2-scope)
 5. [Custom Grant Type](#oauth2-grant-type)
-6. [Customizing Token Parameters](#oauth2-custom-params)
-7. [Authorization Code Flow with PKCE](#oauth2-auth-code)
-8. [Custom Storage](#oauth2-storage)
-9. [Using with HttpClient via Middleware](#oauth2-httpclient)
-10. [TokenData Value Object](#oauth2-tokendata)
-11. [StorageInterface](#storage-interface)
-12. [Storage Notes](#session-storage)
-13. [Comparison with Other Libraries](#comparison)
+6. [Disabling Token Cache](#oauth2-no-cache)
+7. [Getting TokenData](#oauth2-token-data-access)
+8. [Customizing Token Parameters](#oauth2-custom-params)
+9. [Authorization Code Flow with PKCE](#oauth2-auth-code)
+10. [Custom Storage](#oauth2-storage)
+11. [Using with HttpClient via Middleware](#oauth2-httpclient)
+12. [TokenData Value Object](#oauth2-tokendata)
+13. [StorageInterface](#storage-interface)
+14. [Storage Notes](#session-storage)
+15. [Comparison with Other Libraries](#comparison)
 
 ---
 
@@ -173,6 +175,66 @@ class MyApiOAuth2 extends OAuth2
 ```
 
 The `grant_type` parameter is included automatically in all token requests.
+
+---
+
+## Disabling Token Cache<a id="oauth2-no-cache"></a>
+
+By default, tokens are cached and reused until expired. Call `withoutCache()` to
+always fetch a fresh token from the endpoint:
+
+```php
+use App\Clients\MyApiOAuth2;
+
+$token = MyApiOAuth2::request('client-id', 'client-secret')
+    ->withoutCache()
+    ->getAccessToken();
+```
+
+When cache is disabled:
+
+- Every call to `getAccessToken()` or `getTokenData()` hits the token endpoint
+- The returned `TokenData` has `expiresAt: 0` (expiry is irrelevant)
+- Storage is not read or written
+
+You can also disable cache by default in a subclass:
+
+```php
+class DevApiOAuth2 extends OAuth2
+{
+    protected string $accessTokenEndpoint = 'https://dev.api.example.com/oauth/token';
+    protected bool $cacheEnabled = false;
+}
+```
+
+---
+
+## Getting TokenData<a id="oauth2-token-data-access"></a>
+
+Use `getTokenData()` to retrieve the full `TokenData` object instead of just the
+access token string:
+
+```php
+use App\Clients\MyApiOAuth2;
+
+$tokenData = MyApiOAuth2::request('client-id', 'client-secret')->getTokenData();
+
+if ($tokenData === null) {
+    throw new RuntimeException('Token acquisition failed.');
+}
+
+echo $tokenData->accessToken;    // "eyJhbGciOi..."
+echo $tokenData->expiresAt;      // 1714000770 (unix timestamp)
+echo $tokenData->tokenType;      // "Bearer"
+echo $tokenData->hasExpired();   // false
+
+// With cache disabled, expiresAt is always 0
+$tokenData = MyApiOAuth2::request('client-id', 'client-secret')
+    ->withoutCache()
+    ->getTokenData();
+
+echo $tokenData->expiresAt; // 0
+```
 
 ---
 

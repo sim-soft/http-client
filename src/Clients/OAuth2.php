@@ -62,6 +62,9 @@ abstract class OAuth2
     /** @var string|null OAuth2 scope. Null omits the scope parameter entirely. */
     protected ?string $scope = null;
 
+    /** @var bool Whether token caching is enabled. */
+    protected bool $cacheEnabled = true;
+
     /** @var StorageInterface Token persistence storage. */
     protected StorageInterface $storage;
 
@@ -110,6 +113,19 @@ abstract class OAuth2
     }
 
     /**
+     * Disable token caching — always fetches a fresh token from the endpoint.
+     *
+     * Useful during development, testing, or when tokens must not be persisted.
+     *
+     * @return $this
+     */
+    public function withoutCache(): self
+    {
+        $this->cacheEnabled = false;
+        return $this;
+    }
+
+    /**
      * Get the active token endpoint URL.
      *
      * @return string
@@ -132,6 +148,18 @@ abstract class OAuth2
      */
     public function getAccessToken(): ?string
     {
+        return $this->getTokenData()?->accessToken;
+    }
+
+    /**
+     * Get the full TokenData object, refreshing or acquiring a new token as needed.
+     *
+     * Returns null on failure — check error_log() for details.
+     *
+     * @return TokenData|null
+     */
+    public function getTokenData(): ?TokenData
+    {
         try {
             return $this->resolveToken();
         } catch (Throwable $throwable) {
@@ -146,42 +174,53 @@ abstract class OAuth2
     }
 
     /**
-     * Resolve a valid access token from cache or by acquisition.
+     * Resolve a valid token from cache or by acquisition.
      *
-     * @return string
+     * @return TokenData
      * @throws RuntimeException When token acquisition fails.
      * @throws Throwable
      */
-    private function resolveToken(): string
+    private function resolveToken(): TokenData
     {
+        if (!$this->cacheEnabled) {
+            $token = $this->fetchNewToken();
+            return new TokenData(
+                accessToken: $token->accessToken,
+                expiresAt: 0,
+                refreshToken: $token->refreshToken,
+                tokenType: $token->tokenType,
+                scope: $token->scope,
+            );
+        }
+
         if ($this->storage->has($this->clientId)) {
             return $this->handleCachedToken();
         }
 
         $token = $this->fetchNewToken();
         $this->storage->set($this->clientId, $token);
-        return $token->accessToken;
+        return $token;
     }
 
     /**
      * Handle a cached token — return it if valid, refresh or re-acquire if expired.
      *
-     * @return string The valid access token string.
+     * @return TokenData The valid token data.
      * @throws RuntimeException When token acquisition fails.
      * @throws Throwable
      */
-    private function handleCachedToken(): string
+    private function handleCachedToken(): TokenData
     {
         /** @var TokenData $token */
         $token = $this->storage->get($this->clientId);
 
         if (!$token->hasExpired()) {
-            return $token->accessToken;
+            return $token;
         }
 
         $freshToken = $this->handleExpiredToken($token);
         $this->storage->set($this->clientId, $freshToken);
-        return $freshToken->accessToken;
+        return $freshToken;
     }
 
     /**
