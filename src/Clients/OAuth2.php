@@ -225,12 +225,14 @@ abstract class OAuth2
     }
 
     /**
-     * Fetch a fresh access token using the configured grant type.
+     * Build the POST body parameters for a fresh token request.
      *
-     * @return TokenData
-     * @throws RuntimeException|Throwable When the token endpoint returns a non-successful response.
+     * Subclasses may override this method to add provider-specific parameters
+     * (e.g., `audience` for Auth0, `resource` for Azure AD).
+     *
+     * @return array<string, string> The token request parameters.
      */
-    protected function fetchNewToken(): TokenData
+    protected function buildTokenParams(): array
     {
         $params = [
             'grant_type' => $this->grantType,
@@ -242,7 +244,18 @@ abstract class OAuth2
             $params['scope'] = $this->scope;
         }
 
-        $response = $this->buildTokenRequest($params);
+        return $params;
+    }
+
+    /**
+     * Fetch a fresh access token using the configured grant type.
+     *
+     * @return TokenData
+     * @throws RuntimeException|Throwable When the token endpoint returns a non-successful response.
+     */
+    protected function fetchNewToken(): TokenData
+    {
+        $response = $this->buildTokenRequest($this->buildTokenParams());
 
         if (!$response->successful()) {
             throw new RuntimeException(sprintf(
@@ -256,6 +269,25 @@ abstract class OAuth2
     }
 
     /**
+     * Build the POST body parameters for a token refresh request.
+     *
+     * Subclasses may override this method to add provider-specific parameters
+     * (e.g., `scope` for providers that require it on refresh).
+     *
+     * @param TokenData $token The expired token with a refresh token.
+     * @return array<string, string> The refresh request parameters.
+     */
+    protected function buildRefreshParams(TokenData $token): array
+    {
+        return [
+            'grant_type' => 'refresh_token',
+            'client_id' => $this->clientId,
+            'client_secret' => $this->clientSecret,
+            'refresh_token' => (string)$token->refreshToken,
+        ];
+    }
+
+    /**
      * Refresh an existing access token using its refresh token.
      *
      * @param TokenData $token The expired token with a refresh token.
@@ -265,14 +297,7 @@ abstract class OAuth2
      */
     protected function refreshToken(TokenData $token): TokenData
     {
-        $params = [
-            'grant_type' => 'refresh_token',
-            'client_id' => $this->clientId,
-            'client_secret' => $this->clientSecret,
-            'refresh_token' => (string)$token->refreshToken,
-        ];
-
-        $response = $this->buildTokenRequest($params);
+        $response = $this->buildTokenRequest($this->buildRefreshParams($token));
 
         if (!$response->successful()) {
             throw new RuntimeException(sprintf(

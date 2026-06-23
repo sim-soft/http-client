@@ -1,5 +1,8 @@
 # Simsoft HttpClient
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![PHP Version](https://img.shields.io/badge/PHP-%5E8.1-8892BF.svg)](https://www.php.net/)
+
 ## Introduction
 
 Simsoft HttpClient is a fluent PHP HTTP client built on `ext-curl` with zero

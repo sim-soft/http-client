@@ -2,7 +2,7 @@
 
 The `OAuth2` class handles the full OAuth2 token lifecycle — acquisition,
 caching, expiry detection, and automatic refresh — using only the library's own
-`HttpClient`. Zero external dependencies required.
+`HttpClient`. Zero external dependencies are required.
 
 Your application code never needs to manage tokens manually. Just call
 `getAccessToken()` and the class handles everything: checking the cache,
@@ -17,13 +17,14 @@ refreshing expired tokens, and acquiring new ones as needed.
 3. [Sandbox Mode](#oauth2-sandbox)
 4. [Custom Scope](#oauth2-scope)
 5. [Custom Grant Type](#oauth2-grant-type)
-6. [Authorization Code Flow with PKCE](#oauth2-auth-code)
-7. [Custom Storage](#oauth2-storage)
-8. [Using with HttpClient via Middleware](#oauth2-httpclient)
-9. [TokenData Value Object](#oauth2-tokendata)
-10. [StorageInterface](#storage-interface)
-11. [Storage Notes](#session-storage)
-12. [Comparison with Other Libraries](#comparison)
+6. [Customizing Token Parameters](#oauth2-custom-params)
+7. [Authorization Code Flow with PKCE](#oauth2-auth-code)
+8. [Custom Storage](#oauth2-storage)
+9. [Using with HttpClient via Middleware](#oauth2-httpclient)
+10. [TokenData Value Object](#oauth2-tokendata)
+11. [StorageInterface](#storage-interface)
+12. [Storage Notes](#session-storage)
+13. [Comparison with Other Libraries](#comparison)
 
 ---
 
@@ -175,6 +176,174 @@ The `grant_type` parameter is included automatically in all token requests.
 
 ---
 
+## Customizing Token Parameters<a id="oauth2-custom-params"></a>
+
+The `OAuth2` class exposes protected methods for building request parameters at
+each stage of the token lifecycle. Override them in your subclass to add
+provider-specific fields without duplicating core logic.
+
+| Method                       | Called During                | Use Case                                   |
+|------------------------------|------------------------------|--------------------------------------------|
+| `buildTokenParams()`         | Fresh token acquisition      | Add `audience`, `resource`, custom fields  |
+| `buildRefreshParams()`       | Token refresh                | Add `scope`, `resource` on refresh         |
+| `buildAuthorizationParams()` | Authorization URL generation | Add `access_type`, `prompt`, custom params |
+| `buildCodeExchangeParams()`  | Authorization code exchange  | Add `tenant`, provider-specific fields     |
+
+### Adding `audience` for Auth0
+
+Auth0 requires an `audience` parameter on every token request:
+
+```php
+namespace App\Clients;
+
+use Simsoft\HttpClient\Clients\OAuth2;
+
+class Auth0OAuth2 extends OAuth2
+{
+    protected string $accessTokenEndpoint = 'https://your-tenant.auth0.com/oauth/token';
+    protected ?string $scope = 'openid profile email';
+
+    protected function buildTokenParams(): array
+    {
+        $params = parent::buildTokenParams();
+        $params['audience'] = 'https://api.your-app.com';
+        return $params;
+    }
+}
+```
+
+```php
+use App\Clients\Auth0OAuth2;
+
+$token = Auth0OAuth2::request('client-id', 'client-secret')->getAccessToken();
+```
+
+### Adding `resource` for Azure AD
+
+Azure AD uses a `resource` parameter to indicate the target API:
+
+```php
+namespace App\Clients;
+
+use Simsoft\HttpClient\Clients\OAuth2;
+use Simsoft\HttpClient\Clients\TokenData;
+
+class AzureOAuth2 extends OAuth2
+{
+    protected string $accessTokenEndpoint = 'https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token';
+    protected ?string $scope = 'https://graph.microsoft.com/.default';
+
+    protected function buildTokenParams(): array
+    {
+        $params = parent::buildTokenParams();
+        $params['resource'] = 'https://graph.microsoft.com';
+        return $params;
+    }
+
+    protected function buildRefreshParams(TokenData $token): array
+    {
+        $params = parent::buildRefreshParams($token);
+        $params['resource'] = 'https://graph.microsoft.com';
+        $params['scope'] = $this->scope ?? '';
+        return $params;
+    }
+}
+```
+
+### Sending credentials in the Authorization header
+
+Some providers (e.g., Spotify) require client credentials as a Basic Auth header
+instead of in the POST body. Override `buildTokenRequest()`:
+
+```php
+namespace App\Clients;
+
+use Simsoft\HttpClient\Clients\OAuth2;
+use Simsoft\HttpClient\Clients\Responses\OAuth2TokenResponse;
+use Simsoft\HttpClient\HttpClient;
+
+class SpotifyOAuth2 extends OAuth2
+{
+    protected string $accessTokenEndpoint = 'https://accounts.spotify.com/api/token';
+
+    protected function buildTokenParams(): array
+    {
+        // Omit client_id/client_secret from body — sent via header instead
+        $params = ['grant_type' => $this->grantType];
+
+        if ($this->scope !== null) {
+            $params['scope'] = $this->scope;
+        }
+
+        return $params;
+    }
+
+    protected function buildTokenRequest(array $params): OAuth2TokenResponse
+    {
+        $credentials = base64_encode($this->clientId . ':' . $this->clientSecret);
+
+        /** @var OAuth2TokenResponse $response */
+        $response = HttpClient::make()
+            ->withResponseClass(OAuth2TokenResponse::class)
+            ->withHeader('Authorization', 'Basic ' . $credentials)
+            ->withForm($params)
+            ->post($this->getEndpoint());
+
+        return $response;
+    }
+}
+```
+
+### Combining multiple customizations
+
+Override multiple methods in a single subclass for complex providers:
+
+```php
+namespace App\Clients;
+
+use Simsoft\HttpClient\Clients\OAuth2;
+use Simsoft\HttpClient\Clients\TokenData;
+
+class CustomProviderOAuth2 extends OAuth2
+{
+    protected string $accessTokenEndpoint = 'https://provider.example.com/oauth/token';
+    protected string $authorizeEndpoint   = 'https://provider.example.com/oauth/authorize';
+    protected string $redirectUri         = 'https://myapp.example.com/callback';
+    protected ?string $scope              = 'api.read api.write';
+
+    protected function buildTokenParams(): array
+    {
+        $params = parent::buildTokenParams();
+        $params['audience'] = 'https://api.provider.example.com';
+        return $params;
+    }
+
+    protected function buildRefreshParams(TokenData $token): array
+    {
+        $params = parent::buildRefreshParams($token);
+        $params['scope'] = $this->scope ?? '';
+        return $params;
+    }
+
+    protected function buildAuthorizationParams(string $state, string $codeChallenge): array
+    {
+        $params = parent::buildAuthorizationParams($state, $codeChallenge);
+        $params['access_type'] = 'offline';
+        $params['prompt'] = 'consent';
+        return $params;
+    }
+
+    protected function buildCodeExchangeParams(string $code, string $verifier): array
+    {
+        $params = parent::buildCodeExchangeParams($code, $verifier);
+        $params['audience'] = 'https://api.provider.example.com';
+        return $params;
+    }
+}
+```
+
+---
+
 ## Authorization Code Flow with PKCE<a id="oauth2-auth-code"></a>
 
 The authorization code flow is designed for applications where a user
@@ -190,7 +359,7 @@ interception attacks.
 3. The provider redirects back to your app with an authorization `code`
 4. Your app exchanges the code for an access token
 
-Once the token is stored, subsequent calls to `getAccessToken()` use the cached
+Once the token is stored, later calls to `getAccessToken()` use the cached
 token (or refresh it automatically if a refresh token is available) — identical
 to the `client_credentials` flow.
 
@@ -380,7 +549,7 @@ class GoogleOAuth2 extends OAuth2
 }
 ```
 
-#### Example — Microsoft with tenant-specific endpoint
+#### Example — Microsoft with a tenant-specific endpoint
 
 ```php
 namespace App\Clients;
@@ -521,14 +690,14 @@ $tokenData->hasExpired(); // false (if within the hour)
 // Convert to array (useful for custom storage backends)
 $array = $tokenData->toArray();
 // [
-//     'access_token'  => 'eyJhbGciOiJSUzI1NiJ9...',
+//     'access_token' => 'eyJhbGciOiJSUzI1NiJ9...',
 //     'expires_at'    => 1714000770,
 //     'refresh_token' => 'def50200...',
 //     'token_type'    => 'Bearer',
 //     'scope'         => 'read:users write:orders',
 // ]
 
-// Reconstruct from array
+// Reconstruct from an array
 $restored = TokenData::fromArray($array);
 ```
 
@@ -629,7 +798,7 @@ $token = MyApiOAuth2::request('client-id', 'client-secret', $storage)
 
 **Default: FileStorage**
 The default `FileStorage` persists tokens as serialized files in the system temp
-directory (`sys_get_temp_dir()/oauth_tokens/`). This works in web, CLI, queues,
+directory (`sys_get_temp_dir()/oauth_tokens/`). This works in web, CLI, queue,
 and workers without any configuration.
 
 **SessionStorage (optional)**
