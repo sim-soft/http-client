@@ -19,6 +19,7 @@ final class TokenData
      * @param string|null $refreshToken Refresh token for getting new access tokens.
      * @param string|null $tokenType Token type (typically "Bearer").
      * @param string|null $scope Granted scope string.
+     * @param array<string, mixed> $metadata Custom provider-specific data.
      */
     public function __construct(
         public readonly string $accessToken,
@@ -26,6 +27,7 @@ final class TokenData
         public readonly ?string $refreshToken = null,
         public readonly ?string $tokenType = null,
         public readonly ?string $scope = null,
+        public readonly array $metadata = [],
     )
     {
     }
@@ -55,6 +57,7 @@ final class TokenData
             'refresh_token' => $this->refreshToken,
             'token_type' => $this->tokenType,
             'scope' => $this->scope,
+            'metadata' => $this->metadata,
         ];
     }
 
@@ -62,7 +65,7 @@ final class TokenData
      * Reconstruct a TokenData from a plain array.
      *
      * @param array<string, mixed> $data Array with keys: access_token, expires_at,
-     *                                   and optionally refresh_token, token_type, scope.
+     *                                   and optionally refresh_token, token_type, scope, metadata.
      *
      * @return static
      */
@@ -74,6 +77,7 @@ final class TokenData
             refreshToken: isset($data['refresh_token']) ? (string)$data['refresh_token'] : null,
             tokenType: isset($data['token_type']) ? (string)$data['token_type'] : null,
             scope: isset($data['scope']) ? (string)$data['scope'] : null,
+            metadata: isset($data['metadata']) && is_array($data['metadata']) ? $data['metadata'] : [],
         );
     }
 }

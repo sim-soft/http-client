@@ -24,9 +24,10 @@ refreshing expired tokens, and acquiring new ones as needed.
 10. [Custom Storage](#oauth2-storage)
 11. [Using with HttpClient via Middleware](#oauth2-httpclient)
 12. [TokenData Value Object](#oauth2-tokendata)
-13. [StorageInterface](#storage-interface)
-14. [Storage Notes](#session-storage)
-15. [Comparison with Other Libraries](#comparison)
+13. [Custom Metadata](#oauth2-metadata)
+14. [StorageInterface](#storage-interface)
+15. [Storage Notes](#session-storage)
+16. [Comparison with Other Libraries](#comparison)
 
 ---
 
@@ -729,8 +730,8 @@ $response = $client->post('/orders', ['item_id' => 42, 'qty' => 1]);
 ## TokenData Value Object<a id="oauth2-tokendata"></a>
 
 Tokens are stored internally as `TokenData` — a serializable value object with
-only scalar properties. This ensures safe persistence in PHP sessions, Redis,
-databases, or any cache backend.
+only scalar properties and an optional metadata array. This ensures safe
+persistence in PHP sessions, Redis, databases, or any cache backend.
 
 Namespace: `Simsoft\HttpClient\Clients`
 
@@ -744,19 +745,24 @@ $tokenData = new TokenData(
     refreshToken: 'def50200...',
     tokenType:    'Bearer',
     scope:        'read:users write:orders',
+    metadata:     ['id_token' => 'eyJ...', 'org_id' => 'org_123'],
 );
 
 // Check expiry
 $tokenData->hasExpired(); // false (if within the hour)
 
+// Access custom metadata
+$idToken = $tokenData->metadata['id_token'] ?? null;
+
 // Convert to array (useful for custom storage backends)
 $array = $tokenData->toArray();
 // [
-//     'access_token' => 'eyJhbGciOiJSUzI1NiJ9...',
+//     'access_token'  => 'eyJhbGciOiJSUzI1NiJ9...',
 //     'expires_at'    => 1714000770,
 //     'refresh_token' => 'def50200...',
 //     'token_type'    => 'Bearer',
 //     'scope'         => 'read:users write:orders',
+//     'metadata'      => ['id_token' => 'eyJ...', 'org_id' => 'org_123'],
 // ]
 
 // Reconstruct from an array
@@ -765,13 +771,14 @@ $restored = TokenData::fromArray($array);
 
 **Properties:**
 
-| Property       | Type      | Description                                    |
-|----------------|-----------|------------------------------------------------|
-| `accessToken`  | `string`  | The OAuth2 access token string                 |
-| `expiresAt`    | `int`     | Unix timestamp when the token expires          |
-| `refreshToken` | `?string` | Refresh token (null if not provided by server) |
-| `tokenType`    | `?string` | Token type, typically "Bearer"                 |
-| `scope`        | `?string` | Granted scope string                           |
+| Property       | Type                   | Description                                    |
+|----------------|------------------------|------------------------------------------------|
+| `accessToken`  | `string`               | The OAuth2 access token string                 |
+| `expiresAt`    | `int`                  | Unix timestamp when the token expires          |
+| `refreshToken` | `?string`              | Refresh token (null if not provided by server) |
+| `tokenType`    | `?string`              | Token type, typically "Bearer"                 |
+| `scope`        | `?string`              | Granted scope string                           |
+| `metadata`     | `array<string, mixed>` | Custom provider-specific data                  |
 
 **Methods:**
 
@@ -785,6 +792,115 @@ $restored = TokenData::fromArray($array);
 > `expiresAt` from the server's `expires_in` value. This accounts for clock
 > skew and network latency, ensuring tokens are refreshed slightly before they
 > actually expire.
+
+### Custom Metadata via `buildTokenMetadata()`<a id="oauth2-metadata"></a>
+
+Override `buildTokenMetadata()` in your subclass to extract provider-specific
+fields from the token response and store them alongside the token:
+
+```php
+namespace App\Clients;
+
+use Simsoft\HttpClient\Clients\OAuth2;
+use Simsoft\HttpClient\Clients\Responses\OAuth2TokenResponse;
+
+class GoogleOAuth2 extends OAuth2
+{
+    protected string $accessTokenEndpoint = 'https://oauth2.googleapis.com/token';
+    protected string $authorizeEndpoint   = 'https://accounts.google.com/o/oauth2/v2/auth';
+    protected string $redirectUri         = 'https://myapp.example.com/callback';
+    protected ?string $scope              = 'openid email profile';
+
+    protected function buildTokenMetadata(OAuth2TokenResponse $response): array
+    {
+        return [
+            'id_token' => $response->data('id_token'),
+            'issued_at' => time(),
+        ];
+    }
+}
+```
+
+```php
+use App\Clients\GoogleOAuth2;
+
+$tokenData = GoogleOAuth2::request('client-id', 'client-secret')->getTokenData();
+
+$idToken = $tokenData->metadata['id_token'] ?? null;
+$issuedAt = $tokenData->metadata['issued_at'] ?? null;
+```
+
+#### Example — Storing organization context (Auth0)
+
+```php
+namespace App\Clients;
+
+use Simsoft\HttpClient\Clients\OAuth2;
+use Simsoft\HttpClient\Clients\Responses\OAuth2TokenResponse;
+
+class Auth0OAuth2 extends OAuth2
+{
+    protected string $accessTokenEndpoint = 'https://your-tenant.auth0.com/oauth/token';
+    protected ?string $scope = 'openid profile';
+
+    protected function buildTokenParams(): array
+    {
+        $params = parent::buildTokenParams();
+        $params['audience'] = 'https://api.your-app.com';
+        return $params;
+    }
+
+    protected function buildTokenMetadata(OAuth2TokenResponse $response): array
+    {
+        return [
+            'organization' => $response->data('organization'),
+            'organization_name' => $response->data('organization_name'),
+        ];
+    }
+}
+```
+
+```php
+use App\Clients\Auth0OAuth2;
+
+$tokenData = Auth0OAuth2::request('client-id', 'client-secret')->getTokenData();
+
+$org = $tokenData->metadata['organization'] ?? null;
+```
+
+#### Example — Storing user info from token response
+
+```php
+namespace App\Clients;
+
+use Simsoft\HttpClient\Clients\OAuth2;
+use Simsoft\HttpClient\Clients\Responses\OAuth2TokenResponse;
+
+class CustomProviderOAuth2 extends OAuth2
+{
+    protected string $accessTokenEndpoint = 'https://provider.example.com/oauth/token';
+    protected string $authorizeEndpoint   = 'https://provider.example.com/oauth/authorize';
+    protected string $redirectUri         = 'https://myapp.example.com/callback';
+
+    protected function buildTokenMetadata(OAuth2TokenResponse $response): array
+    {
+        return [
+            'user_id' => $response->data('user_id'),
+            'email' => $response->data('email'),
+            'roles' => $response->data('roles', []),
+        ];
+    }
+}
+```
+
+```php
+use App\Clients\CustomProviderOAuth2;
+
+$tokenData = CustomProviderOAuth2::request('id', 'secret')->getTokenData();
+
+$userId = $tokenData->metadata['user_id'];
+$roles = $tokenData->metadata['roles'];
+```
 
 ---
 

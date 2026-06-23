@@ -190,6 +190,7 @@ abstract class OAuth2
                 refreshToken: $token->refreshToken,
                 tokenType: $token->tokenType,
                 scope: $token->scope,
+                metadata: $token->metadata,
             );
         }
 
@@ -373,7 +374,8 @@ abstract class OAuth2
      * Convert an OAuth2 token response to a TokenData value object.
      *
      * Applies a 30-second safety buffer to the expiry time to account for
-     * clock skew and network latency.
+     * clock skew and network latency. Override this method to populate
+     * custom metadata from the token response.
      *
      * @param OAuth2TokenResponse $response The parsed token response.
      * @return TokenData
@@ -389,7 +391,22 @@ abstract class OAuth2
             refreshToken: $response->getRefreshToken(),
             tokenType: $response->getTokenType(),
             scope: $response->getScope(),
+            metadata: $this->buildTokenMetadata($response),
         );
+    }
+
+    /**
+     * Build custom metadata to include in the TokenData.
+     *
+     * Subclasses may override this method to extract provider-specific fields
+     * from the token response (e.g., `id_token`, `user_id`, `organization`).
+     *
+     * @param OAuth2TokenResponse $response The parsed token response.
+     * @return array<string, mixed> Custom metadata to store alongside the token.
+     */
+    protected function buildTokenMetadata(OAuth2TokenResponse $response): array
+    {
+        return [];
     }
 
     /**
