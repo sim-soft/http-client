@@ -65,6 +65,15 @@ abstract class OAuth2
     /** @var bool Whether token caching is enabled. */
     protected bool $cacheEnabled = true;
 
+    /** @var int|null Execution timeout in seconds for token requests. Null uses HttpClient default (30s). */
+    protected ?int $timeout = null;
+
+    /** @var int|null Connection timeout in seconds for token requests. Null uses HttpClient default (5s). */
+    protected ?int $connectionTimeout = null;
+
+    /** @var int|null DNS cache timeout in seconds for token requests. Null uses HttpClient default (60s). */
+    protected ?int $dnsTimeout = null;
+
     /** @var StorageInterface Token persistence storage. */
     protected StorageInterface $storage;
 
@@ -122,6 +131,42 @@ abstract class OAuth2
     public function withoutCache(): self
     {
         $this->cacheEnabled = false;
+        return $this;
+    }
+
+    /**
+     * Set the execution timeout for token requests.
+     *
+     * @param int $seconds Maximum execution time in seconds. 0 means no limit.
+     * @return $this
+     */
+    public function timeout(int $seconds): self
+    {
+        $this->timeout = $seconds;
+        return $this;
+    }
+
+    /**
+     * Set the connection timeout for token requests.
+     *
+     * @param int $seconds Maximum connection time in seconds. 0 means no limit.
+     * @return $this
+     */
+    public function connectionTimeout(int $seconds): self
+    {
+        $this->connectionTimeout = $seconds;
+        return $this;
+    }
+
+    /**
+     * Set the DNS cache timeout for token requests.
+     *
+     * @param int $seconds DNS cache timeout in seconds. 0 means no caching.
+     * @return $this
+     */
+    public function dnsTimeout(int $seconds): self
+    {
+        $this->dnsTimeout = $seconds;
         return $this;
     }
 
@@ -360,11 +405,23 @@ abstract class OAuth2
      */
     protected function buildTokenRequest(array $params): OAuth2TokenResponse
     {
+        $client = HttpClient::make()
+            ->withResponseClass(OAuth2TokenResponse::class);
+
+        if ($this->timeout !== null) {
+            $client->timeout($this->timeout);
+        }
+
+        if ($this->connectionTimeout !== null) {
+            $client->connectionTimeout($this->connectionTimeout);
+        }
+
+        if ($this->dnsTimeout !== null) {
+            $client->withDNSTimeout($this->dnsTimeout);
+        }
+
         /** @var OAuth2TokenResponse $response */
-        $response = HttpClient::make()
-            ->withResponseClass(OAuth2TokenResponse::class)
-            ->withForm($params)
-            ->post($this->getEndpoint());
+        $response = $client->withForm($params)->post($this->getEndpoint());
 
         return $response;
     }
