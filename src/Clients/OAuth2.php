@@ -186,7 +186,6 @@ abstract class OAuth2
             $token = $this->fetchNewToken();
             return new TokenData(
                 accessToken: $token->accessToken,
-                expiresAt: 0,
                 refreshToken: $token->refreshToken,
                 tokenType: $token->tokenType,
                 scope: $token->scope,

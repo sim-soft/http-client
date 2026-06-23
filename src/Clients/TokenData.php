@@ -23,7 +23,7 @@ final class TokenData
      */
     public function __construct(
         public readonly string $accessToken,
-        public readonly int    $expiresAt,
+        public readonly int $expiresAt = 0,
         public readonly ?string $refreshToken = null,
         public readonly ?string $tokenType = null,
         public readonly ?string $scope = null,
