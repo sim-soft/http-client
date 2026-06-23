@@ -2,16 +2,15 @@
 
 namespace Simsoft\HttpClient\Clients;
 
-use Exception;
+use Closure;
 use RuntimeException;
 use Simsoft\HttpClient\Clients\Helpers\FileStorage;
 use Simsoft\HttpClient\Clients\Responses\OAuth2TokenResponse;
+use Simsoft\HttpClient\Clients\Traits\OAuth2AuthCodeTrait;
+use Simsoft\HttpClient\Clients\Traits\OAuth2TokenOperationsTrait;
 use Simsoft\HttpClient\HttpClient;
 use Simsoft\HttpClient\Interfaces\StorageInterface;
 use Throwable;
-
-use function error_log;
-use function sprintf;
 
 /**
  * OAuth2 class.
@@ -33,20 +32,14 @@ use function sprintf;
  */
 abstract class OAuth2
 {
+    use OAuth2AuthCodeTrait;
+    use OAuth2TokenOperationsTrait;
+
     /** @var string Production access token endpoint. */
     protected string $accessTokenEndpoint = '';
 
     /** @var string Sandbox access token endpoint. */
     protected string $sandboxEndpoint = '';
-
-    /** @var string Authorization endpoint URL (production). */
-    protected string $authorizeEndpoint = '';
-
-    /** @var string Authorization endpoint URL (sandbox). */
-    protected string $sandboxAuthEndpoint = '';
-
-    /** @var string OAuth2 redirect URI (callback URL). */
-    protected string $redirectUri = '';
 
     /** @var bool Sandbox mode flag. */
     protected bool $sandboxMode = false;
@@ -61,6 +54,24 @@ abstract class OAuth2
 
     /** @var string|null OAuth2 scope. Null omits the scope parameter entirely. */
     protected ?string $scope = null;
+
+    /** @var bool Whether token caching is enabled. */
+    protected bool $cacheEnabled = true;
+
+    /** @var int Safety buffer in seconds subtracted from token expiry. */
+    protected int $expiryBuffer = 30;
+
+    /** @var HttpClient|null Configured HttpClient instance for token requests. */
+    protected ?HttpClient $httpClient = null;
+
+    /** @var Closure|null Callback invoked when a token is acquired. Receives TokenData. */
+    protected ?Closure $onTokenAcquired = null;
+
+    /** @var Closure|null Callback invoked when a token is refreshed. Receives TokenData. */
+    protected ?Closure $onTokenRefreshed = null;
+
+    /** @var Closure|null Callback invoked when token acquisition fails. Receives Throwable. */
+    protected ?Closure $onTokenFailed = null;
 
     /** @var StorageInterface Token persistence storage. */
     protected StorageInterface $storage;
@@ -110,6 +121,105 @@ abstract class OAuth2
     }
 
     /**
+     * Disable token caching — always fetches a fresh token from the endpoint.
+     *
+     * @return $this
+     */
+    public function withoutCache(): self
+    {
+        $this->cacheEnabled = false;
+        return $this;
+    }
+
+    /**
+     * Set the safety buffer subtracted from token expiry time.
+     *
+     * @param int $seconds Buffer in seconds. 0 means no buffer.
+     * @return $this
+     */
+    public function expiryBuffer(int $seconds): self
+    {
+        $this->expiryBuffer = $seconds;
+        return $this;
+    }
+
+    /**
+     * Set the OAuth2 scope for token requests at runtime.
+     *
+     * @param string|null $scope The scope string, or null to omit.
+     * @return $this
+     */
+    public function withScope(?string $scope): self
+    {
+        $this->scope = $scope;
+        return $this;
+    }
+
+    /**
+     * Get the HttpClient instance used for token requests.
+     *
+     * Configure timeouts, headers, retry, and other options directly
+     * on this instance.
+     *
+     * @return HttpClient
+     */
+    public function getHttpClient(): HttpClient
+    {
+        if ($this->httpClient === null) {
+            $this->httpClient = HttpClient::make();
+        }
+
+        return $this->httpClient;
+    }
+
+    /**
+     * Register a callback invoked when a new token is acquired.
+     *
+     * @param Closure $callback Receives TokenData as argument.
+     * @return $this
+     */
+    public function onTokenAcquired(Closure $callback): self
+    {
+        $this->onTokenAcquired = $callback;
+        return $this;
+    }
+
+    /**
+     * Register a callback invoked when a token is refreshed.
+     *
+     * @param Closure $callback Receives TokenData as argument.
+     * @return $this
+     */
+    public function onTokenRefreshed(Closure $callback): self
+    {
+        $this->onTokenRefreshed = $callback;
+        return $this;
+    }
+
+    /**
+     * Register a callback invoked when token acquisition fails.
+     *
+     * @param Closure $callback Receives Throwable as argument.
+     * @return $this
+     */
+    public function onTokenFailed(Closure $callback): self
+    {
+        $this->onTokenFailed = $callback;
+        return $this;
+    }
+
+    /**
+     * Invalidate the cached token for this client.
+     *
+     * @return $this
+     */
+    public function invalidate(): self
+    {
+        $this->storage->remove($this->clientId);
+        return $this;
+    }
+
+    /**
      * Get the active token endpoint URL.
      *
      * @return string
@@ -126,11 +236,19 @@ abstract class OAuth2
     /**
      * Get a valid access token string, refreshing or acquiring a new one as needed.
      *
-     * Returns null on failure — check error_log() for details.
-     *
      * @return string|null
      */
     public function getAccessToken(): ?string
+    {
+        return $this->getTokenData()?->accessToken;
+    }
+
+    /**
+     * Get the full TokenData object, refreshing or acquiring a new token as needed.
+     *
+     * @return TokenData|null
+     */
+    public function getTokenData(): ?TokenData
     {
         try {
             return $this->resolveToken();
@@ -140,48 +258,56 @@ abstract class OAuth2
                 $this->clientId,
                 $throwable->getMessage()
             ));
+
+            if ($this->onTokenFailed !== null) {
+                ($this->onTokenFailed)($throwable);
+            }
         }
 
         return null;
     }
 
     /**
-     * Resolve a valid access token from cache or by acquisition.
+     * Resolve a valid token from cache or by acquisition.
      *
-     * @return string
+     * @return TokenData
      * @throws RuntimeException When token acquisition fails.
      * @throws Throwable
      */
-    private function resolveToken(): string
+    private function resolveToken(): TokenData
     {
+        if (!$this->cacheEnabled) {
+            return $this->fetchNewToken();
+        }
+
         if ($this->storage->has($this->clientId)) {
             return $this->handleCachedToken();
         }
 
         $token = $this->fetchNewToken();
         $this->storage->set($this->clientId, $token);
-        return $token->accessToken;
+        return $token;
     }
 
     /**
-     * Handle a cached token — return it if valid, refresh or re-acquire if expired.
+     * Handle a cached token — return if valid, refresh or re-acquire if expired.
      *
-     * @return string The valid access token string.
+     * @return TokenData The valid token data.
      * @throws RuntimeException When token acquisition fails.
      * @throws Throwable
      */
-    private function handleCachedToken(): string
+    private function handleCachedToken(): TokenData
     {
         /** @var TokenData $token */
         $token = $this->storage->get($this->clientId);
 
         if (!$token->hasExpired()) {
-            return $token->accessToken;
+            return $token;
         }
 
         $freshToken = $this->handleExpiredToken($token);
         $this->storage->set($this->clientId, $freshToken);
-        return $freshToken->accessToken;
+        return $freshToken;
     }
 
     /**
@@ -202,7 +328,7 @@ abstract class OAuth2
     }
 
     /**
-     * Attempt to refresh the token, falling back to fresh acquisition on failure.
+     * Attempt refresh, falling back to fresh acquisition on failure.
      *
      * @param TokenData $token The expired token with a refresh token.
      * @return TokenData A fresh token.
@@ -225,12 +351,13 @@ abstract class OAuth2
     }
 
     /**
-     * Fetch a fresh access token using the configured grant type.
+     * Build the POST body parameters for a fresh token request.
      *
-     * @return TokenData
-     * @throws RuntimeException|Throwable When the token endpoint returns a non-successful response.
+     * Subclasses may override to add provider-specific parameters.
+     *
+     * @return array<string, string> The token request parameters.
      */
-    protected function fetchNewToken(): TokenData
+    protected function buildTokenParams(): array
     {
         $params = [
             'grant_type' => $this->grantType,
@@ -242,7 +369,18 @@ abstract class OAuth2
             $params['scope'] = $this->scope;
         }
 
-        $response = $this->buildTokenRequest($params);
+        return $params;
+    }
+
+    /**
+     * Fetch a fresh access token using the configured grant type.
+     *
+     * @return TokenData
+     * @throws RuntimeException|Throwable When the token endpoint returns a non-successful response.
+     */
+    protected function fetchNewToken(): TokenData
+    {
+        $response = $this->buildTokenRequest($this->buildTokenParams());
 
         if (!$response->successful()) {
             throw new RuntimeException(sprintf(
@@ -252,7 +390,31 @@ abstract class OAuth2
             ));
         }
 
-        return $this->toTokenData($response);
+        $token = $this->toTokenData($response);
+
+        if ($this->onTokenAcquired !== null) {
+            ($this->onTokenAcquired)($token);
+        }
+
+        return $token;
+    }
+
+    /**
+     * Build the POST body parameters for a token refresh request.
+     *
+     * Subclasses may override to add provider-specific parameters.
+     *
+     * @param TokenData $token The expired token with a refresh token.
+     * @return array<string, string> The refresh request parameters.
+     */
+    protected function buildRefreshParams(TokenData $token): array
+    {
+        return [
+            'grant_type' => 'refresh_token',
+            'client_id' => $this->clientId,
+            'client_secret' => $this->clientSecret,
+            'refresh_token' => (string)$token->refreshToken,
+        ];
     }
 
     /**
@@ -265,14 +427,7 @@ abstract class OAuth2
      */
     protected function refreshToken(TokenData $token): TokenData
     {
-        $params = [
-            'grant_type' => 'refresh_token',
-            'client_id' => $this->clientId,
-            'client_secret' => $this->clientSecret,
-            'refresh_token' => (string)$token->refreshToken,
-        ];
-
-        $response = $this->buildTokenRequest($params);
+        $response = $this->buildTokenRequest($this->buildRefreshParams($token));
 
         if (!$response->successful()) {
             throw new RuntimeException(sprintf(
@@ -282,13 +437,17 @@ abstract class OAuth2
             ));
         }
 
-        return $this->toTokenData($response);
+        $freshToken = $this->toTokenData($response);
+
+        if ($this->onTokenRefreshed !== null) {
+            ($this->onTokenRefreshed)($freshToken);
+        }
+
+        return $freshToken;
     }
 
     /**
      * Send a token request to the token endpoint.
-     *
-     * Creates a fresh HttpClient instance per request to avoid state leakage.
      *
      * @param array<string, string> $params Form parameters for the token request.
      * @return OAuth2TokenResponse
@@ -297,7 +456,7 @@ abstract class OAuth2
     protected function buildTokenRequest(array $params): OAuth2TokenResponse
     {
         /** @var OAuth2TokenResponse $response */
-        $response = HttpClient::make()
+        $response = $this->getHttpClient()
             ->withResponseClass(OAuth2TokenResponse::class)
             ->withForm($params)
             ->post($this->getEndpoint());
@@ -308,254 +467,29 @@ abstract class OAuth2
     /**
      * Convert an OAuth2 token response to a TokenData value object.
      *
-     * Applies a 30-second safety buffer to the expiry time to account for
-     * clock skew and network latency.
+     * Subclasses may override this method to add custom metadata or
+     * handle non-standard response fields.
      *
      * @param OAuth2TokenResponse $response The parsed token response.
      * @return TokenData
      */
     protected function toTokenData(OAuth2TokenResponse $response): TokenData
     {
-        $expiresAt = $response->getExpiresAt();
-        $safeExpiresAt = $expiresAt !== null ? $expiresAt - 30 : time() + 3570;
+        $expiresAt = 0;
+
+        if ($this->cacheEnabled) {
+            $serverExpiresAt = $response->getExpiresAt();
+            $expiresAt = $serverExpiresAt !== null
+                ? $serverExpiresAt - $this->expiryBuffer
+                : time() + 3600 - $this->expiryBuffer;
+        }
 
         return new TokenData(
             accessToken: (string)$response->getToken(),
-            expiresAt: $safeExpiresAt,
+            expiresAt: $expiresAt,
             refreshToken: $response->getRefreshToken(),
             tokenType: $response->getTokenType(),
             scope: $response->getScope(),
         );
-    }
-
-    /**
-     * Get the active authorization endpoint URL.
-     *
-     * Returns the sandbox authorized endpoint when sandbox mode is enabled,
-     * otherwise returns the production authorized endpoint.
-     *
-     * @return string The authorization endpoint URL.
-     * @throws RuntimeException When the resolved endpoint is empty.
-     */
-    private function getAuthorizeEndpoint(): string
-    {
-        $endpoint = $this->sandboxMode
-            ? $this->sandboxAuthEndpoint
-            : $this->authorizeEndpoint;
-
-        if ($endpoint === '') {
-            throw new RuntimeException(
-                'Authorization endpoint not configured. Set $authorizeEndpoint in your OAuth2 subclass.'
-            );
-        }
-
-        return $endpoint;
-    }
-
-    /**
-     * Generate a cryptographically random PKCE code verifier.
-     *
-     * Produces a 128-character string using only unreserved characters
-     * (A-Z, a-z, 0-9, -, _, ~) as defined by RFC 7636.
-     *
-     * @return string The generated code verifier.
-     * @throws Exception
-     */
-    private function generateCodeVerifier(): string
-    {
-        $unreserved = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
-        $length = 128;
-        $verifier = '';
-        $bytes = random_bytes($length);
-        $charsetSize = strlen($unreserved);
-
-        for ($i = 0; $i < $length; $i++) {
-            $verifier .= $unreserved[ord($bytes[$i]) % $charsetSize];
-        }
-
-        return $verifier;
-    }
-
-    /**
-     * Derive the S256 code challenge from a code verifier.
-     *
-     * Applies SHA-256 hashing and base64url encoding (no padding) as
-     * specified by RFC 7636.
-     *
-     * @param string $verifier The PKCE code verifier.
-     * @return string The base64url-encoded code challenge.
-     */
-    private function generateCodeChallenge(string $verifier): string
-    {
-        $hash = hash('sha256', $verifier, true);
-
-        return rtrim(strtr(base64_encode($hash), '+/', '-_'), '=');
-    }
-
-    /**
-     * Generate a cryptographically random state value for CSRF protection.
-     *
-     * Produces a 64-character hexadecimal string from 32 random bytes.
-     *
-     * @return string The generated state value.
-     * @throws Exception
-     */
-    private function generateState(): string
-    {
-        return bin2hex(random_bytes(32));
-    }
-
-    /**
-     * Build the query parameters for the authorization URL.
-     *
-     * Subclasses may override this method to add provider-specific parameters
-     * (e.g., `access_type=offline` for Google).
-     *
-     * @param string $state The CSRF state value.
-     * @param string $codeChallenge The PKCE code challenge.
-     * @return array<string, string> The authorization query parameters.
-     */
-    protected function buildAuthorizationParams(string $state, string $codeChallenge): array
-    {
-        $params = [
-            'client_id' => $this->clientId,
-            'redirect_uri' => $this->redirectUri,
-            'response_type' => 'code',
-            'state' => $state,
-            'code_challenge' => $codeChallenge,
-            'code_challenge_method' => 'S256',
-        ];
-
-        if ($this->scope !== null) {
-            $params['scope'] = $this->scope;
-        }
-
-        return $params;
-    }
-
-    /**
-     * Generate the full authorization URL for redirecting the user.
-     *
-     * Generates PKCE verifier and state, stores them for later validation,
-     * and constructs the complete authorization URL with all required parameters.
-     *
-     * @return string The complete authorization URL.
-     * @throws RuntimeException When the authorization endpoint is not configured.
-     * @throws Exception
-     */
-    public function getAuthorizationUrl(): string
-    {
-        $endpoint = $this->getAuthorizeEndpoint();
-
-        $verifier = $this->generateCodeVerifier();
-        $this->storage->set("{$this->clientId}_pkce_verifier", $verifier);
-
-        $state = $this->generateState();
-        $this->storage->set("{$this->clientId}_oauth_state", $state);
-
-        $codeChallenge = $this->generateCodeChallenge($verifier);
-
-        $params = $this->buildAuthorizationParams($state, $codeChallenge);
-        $params = array_filter($params, static fn($value) => $value !== null);
-
-        $separator = str_contains($endpoint, '?') ? '&' : '?';
-        $query = http_build_query($params, '', '&', PHP_QUERY_RFC3986);
-
-        return $endpoint . $separator . $query;
-    }
-
-    /**
-     * Build the POST body parameters for the authorization code exchange.
-     *
-     * Subclasses may override this method to add or modify parameters
-     * for provider-specific token exchange requirements.
-     *
-     * @param string $code The authorization code from the callback.
-     * @param string $verifier The PKCE code verifier.
-     * @return array<string, string> The token exchange parameters.
-     */
-    protected function buildCodeExchangeParams(string $code, string $verifier): array
-    {
-        return [
-            'grant_type' => 'authorization_code',
-            'code' => $code,
-            'redirect_uri' => $this->redirectUri,
-            'client_id' => $this->clientId,
-            'client_secret' => $this->clientSecret,
-            'code_verifier' => $verifier,
-        ];
-    }
-
-    /**
-     * Parse a token endpoint response into a TokenData value object.
-     *
-     * Subclasses may override this method to handle non-standard response
-     * fields from specific providers.
-     *
-     * @param OAuth2TokenResponse $response The token endpoint response.
-     * @return TokenData The parsed token data.
-     */
-    protected function parseTokenResponse(OAuth2TokenResponse $response): TokenData
-    {
-        return $this->toTokenData($response);
-    }
-
-    /**
-     * Exchange an authorization code for an access token.
-     *
-     * Validates the state parameter for CSRF protection, retrieves the stored
-     * PKCE verifier, exchanges the code at the token endpoint, and stores the
-     * resulting TokenData.
-     *
-     * @param string $code The authorization code from the callback.
-     * @param string $state The state parameter from the callback.
-     * @return TokenData The token data from the exchange.
-     * @throws RuntimeException|Throwable When state validation fails, a verifier is missing, or the HTTP request fails.
-     */
-    public function exchangeCode(string $code, string $state): TokenData
-    {
-        $storedState = $this->storage->get("{$this->clientId}_oauth_state");
-
-        if ($storedState === null) {
-            throw new RuntimeException(sprintf(
-                'No stored state found for client "%s". The authorization flow may have expired or was not initiated.',
-                $this->clientId
-            ));
-        }
-
-        if ($state !== $storedState) {
-            throw new RuntimeException(
-                'State parameter mismatch: possible CSRF attack. Expected stored state does not match callback state.'
-            );
-        }
-
-        $this->storage->remove("{$this->clientId}_oauth_state");
-
-        $verifier = $this->storage->get("{$this->clientId}_pkce_verifier");
-
-        if ($verifier === null) {
-            throw new RuntimeException(sprintf(
-                'No stored PKCE verifier found for client "%s". The authorization flow may have expired or was not initiated.',
-                $this->clientId
-            ));
-        }
-
-        $this->storage->remove("{$this->clientId}_pkce_verifier");
-
-        $params = $this->buildCodeExchangeParams($code, $verifier);
-        $response = $this->buildTokenRequest($params);
-
-        if (!$response->successful()) {
-            throw new RuntimeException(sprintf(
-                'Code exchange failed [HTTP %d]: %s',
-                $response->getStatusCode(),
-                $response->getMessage() ?? 'Unknown error'
-            ));
-        }
-
-        $tokenData = $this->parseTokenResponse($response);
-        $this->storage->set($this->clientId, $tokenData);
-
-        return $tokenData;
     }
 }

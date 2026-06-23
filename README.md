@@ -1,5 +1,9 @@
 # Simsoft HttpClient
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![PHP Version](https://img.shields.io/badge/PHP-%5E8.1-8892BF.svg)](https://www.php.net/)
+[![Documentation](https://img.shields.io/badge/docs-online-green.svg)](https://sim-soft.github.io/http-client/)
+
 A fluent PHP HTTP client built on `ext-curl` with zero runtime dependencies.
 PSR-7/PSR-18 compliant, concurrent requests, built-in retry, middleware, and
 test doubles — all in a single lightweight package.

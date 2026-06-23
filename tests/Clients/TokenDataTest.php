@@ -88,6 +88,7 @@ class TokenDataTest extends TestCase
             'refresh_token' => 'my-refresh',
             'token_type' => 'Bearer',
             'scope' => 'admin',
+            'metadata' => [],
         ];
 
         $this->assertSame($expected, $token->toArray());
