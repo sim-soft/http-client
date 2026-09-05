@@ -73,7 +73,10 @@ trait PrepareHandleTrait
             return;
         }
 
-        $headers = array_change_key_case($this->headers);
+        // Per-request headers win over connection-scoped ones of the same name.
+        $headers = array_change_key_case($this->headers)
+            + array_change_key_case($this->persistentHeaders);
+
         $headers['x-request-id'] ??= [$requestId];
         $headers['user-agent'] ??= [$this->userAgent];
 

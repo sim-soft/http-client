@@ -198,7 +198,7 @@ class HttpClientTest extends TestCase
         $client = HttpClient::make()->withBearerToken('my-token-123');
 
         /** @var array<string, array<int, string>> $headers */
-        $headers = $this->getProperty($client, 'headers');
+        $headers = $this->getProperty($client, 'persistentHeaders');
 
         $this->assertSame(['Bearer my-token-123'], $headers['authorization']);
     }

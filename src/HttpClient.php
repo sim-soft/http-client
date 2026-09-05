@@ -60,8 +60,16 @@ class HttpClient implements ClientInterface
     /** @var string  */
     protected string $method = 'GET';
 
-    /** @var array<string, mixed> Headers. */
+    /** @var array<string, mixed> Headers. Cleared after every request. */
     protected array $headers = [];
+
+    /**
+     * Connection-scoped headers that survive flush() and apply to every
+     * request made through this client, e.g. the bearer token.
+     *
+     * @var array<string, mixed>
+     */
+    protected array $persistentHeaders = [];
 
     /** @var array<array-key, mixed>|null Cached formatted headers for cURL. */
     protected ?array $formattedHeaders = null;
@@ -323,12 +331,29 @@ class HttpClient implements ClientInterface
     /**
      * Set bearer token.
      *
+     * The token is connection-scoped: it survives flush() and is applied to
+     * every subsequent request made through this client, so a client may be
+     * configured once and reused. Use withoutBearerToken() to remove it.
+     *
      * @param string $token
      * @return $this
      */
     public function withBearerToken(string $token): self
     {
-        $this->headers['authorization'] = ["Bearer $token"]; // Force single value
+        $this->persistentHeaders['authorization'] = ["Bearer $token"]; // Force single value
+        $this->formattedHeaders = null;
+        return $this;
+    }
+
+    /**
+     * Remove the connection-scoped bearer token from this client.
+     *
+     * @return $this
+     */
+    public function withoutBearerToken(): self
+    {
+        unset($this->persistentHeaders['authorization']);
+        $this->formattedHeaders = null;
         return $this;
     }
 

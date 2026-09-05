@@ -249,4 +249,98 @@ class RequestStateLeakTest extends TestCase
         $retry = new ReflectionProperty(HttpClient::class, 'retry');
         $this->assertSame(3, $retry->getValue($client));
     }
+
+    /**
+     * Test that the bearer token is sent on every request of a reused client.
+     *
+     * baseUrl survives flush(), so the README's configure-once-and-reuse
+     * pattern would otherwise send the second request unauthenticated.
+     *
+     * @return void
+     */
+    #[Test]
+    public function bearerTokenAppliesToEveryRequestOfAReusedClient(): void
+    {
+        $client = FakeHttpClient::fake(['GET *' => 200]);
+        $client->withBaseUrl('https://api.example.com')->withBearerToken('secret-token');
+
+        $client->get('/first');
+        $client->get('/second');
+
+        $recorded = $client->getRecordedRequests();
+
+        $this->assertCount(2, $recorded);
+        $this->assertSame(['Bearer secret-token'], $recorded[0]->headers['authorization']);
+        $this->assertSame(['Bearer secret-token'], $recorded[1]->headers['authorization']);
+    }
+
+    /**
+     * Test that per-request headers do not survive a flush.
+     *
+     * Only explicitly connection-scoped headers persist; a one-off header such
+     * as Idempotency-Key must not leak into the next request.
+     *
+     * @return void
+     */
+    #[Test]
+    public function perRequestHeadersDoNotSurviveFlush(): void
+    {
+        $client = FakeHttpClient::fake(['GET *' => 200]);
+        $client->withBaseUrl('https://api.example.com')->withBearerToken('secret-token');
+
+        $client->withHeader('Idempotency-Key', 'abc-123')->get('/first');
+        $client->get('/second');
+
+        $recorded = $client->getRecordedRequests();
+
+        $this->assertArrayHasKey('Idempotency-Key', $recorded[0]->headers);
+        $this->assertArrayNotHasKey('Idempotency-Key', $recorded[1]->headers);
+        $this->assertSame(['Bearer secret-token'], $recorded[1]->headers['authorization']);
+    }
+
+    /**
+     * Test that a per-request authorization header overrides the bearer token.
+     *
+     * @return void
+     */
+    #[Test]
+    public function perRequestAuthorizationHeaderOverridesBearerToken(): void
+    {
+        $client = HttpClient::make()
+            ->withBaseUrl('https://api.example.com')
+            ->withBearerToken('connection-token');
+
+        $client->withHeader('Authorization', 'Basic dXNlcjpwYXNz');
+
+        $prepare = new ReflectionMethod(HttpClient::class, 'prepareHandle');
+        $prepare->invoke($client, 'test_request_id');
+
+        $formatted = new ReflectionProperty(HttpClient::class, 'formattedHeaders');
+
+        /** @var array<int, string> $headers */
+        $headers = $formatted->getValue($client);
+
+        $this->assertContains('Authorization: Basic dXNlcjpwYXNz', $headers);
+        $this->assertNotContains('Authorization: Bearer connection-token', $headers);
+    }
+
+    /**
+     * Test that withoutBearerToken() removes the token from later requests.
+     *
+     * @return void
+     */
+    #[Test]
+    public function withoutBearerTokenStopsSendingTheToken(): void
+    {
+        $client = FakeHttpClient::fake(['GET *' => 200]);
+        $client->withBaseUrl('https://api.example.com')->withBearerToken('secret-token');
+
+        $client->get('/first');
+        $client->withoutBearerToken()->get('/second');
+
+        $recorded = $client->getRecordedRequests();
+
+        $this->assertArrayHasKey('authorization', $recorded[0]->headers);
+        $this->assertArrayNotHasKey('authorization', $recorded[1]->headers);
+    }
 }

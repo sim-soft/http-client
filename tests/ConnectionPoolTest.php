@@ -213,6 +213,7 @@ class ConnectionPoolTest extends TestCase
             'withQuery',
             'withRaw',
             'withResponseClass',
+            'withoutBearerToken',
             'withoutReturnTransfer',
             'withoutVerifying',
         ];

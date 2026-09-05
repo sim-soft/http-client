@@ -240,7 +240,7 @@ final class FakeHttpClient extends HttpClient
                 $this->recorded[] = new RecordedRequest(
                     method: $method,
                     url: $url,
-                    headers: $this->headers,
+                    headers: $this->headers + $this->persistentHeaders,
                     body: $this->postFields,
                 );
 

@@ -171,6 +171,15 @@ $response = HttpClient::make()
 // Bearer token
 $client = HttpClient::make()->withBearerToken('YOUR_TOKEN');
 
+// The token is connection-scoped: set it once and it is sent with every
+// request made through this client. Headers added with withHeader() are
+// per-request and are cleared after each request.
+$client->get('/users');    // Authorization: Bearer YOUR_TOKEN
+$client->get('/projects'); // Authorization: Bearer YOUR_TOKEN
+
+// Replace the token by calling withBearerToken() again, or remove it:
+$client->withoutBearerToken();
+
 // For OAuth2 flows, see docs/OAUTH2.md
 ```
 
