@@ -10,6 +10,8 @@ fact, so they summarise each release rather than list every change.
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-09-06
+
 ### Security
 
 - **Header injection.** Header names and values are now validated: names must
@@ -313,7 +315,7 @@ fact, so they summarise each release rather than list every change.
 - `OAuth2TokenResponse::getError()` returns the provider's `error` — combined
   with `error_description` when present — or `null` when the response carries
   no OAuth2 error.
-- CI covering PHP 8.1 through 8.4, a lowest-dependency run, PHPStan level 8,
+- CI covering PHP 8.2 through 8.4, a lowest-dependency run, PHPStan level 8,
   PHPMD and PHPCS.
 - This changelog and a security policy.
 
@@ -458,7 +460,8 @@ fact, so they summarise each release rather than list every change.
 
 Initial release.
 
-[Unreleased]: https://github.com/sim-soft/http-client/compare/2.2.4...HEAD
+[Unreleased]: https://github.com/sim-soft/http-client/compare/2.3.0...HEAD
+[2.3.0]: https://github.com/sim-soft/http-client/compare/2.2.4...2.3.0
 [2.2.4]: https://github.com/sim-soft/http-client/compare/2.2.3...2.2.4
 [2.2.3]: https://github.com/sim-soft/http-client/compare/2.2.2...2.2.3
 [2.2.2]: https://github.com/sim-soft/http-client/compare/2.2.1...2.2.2

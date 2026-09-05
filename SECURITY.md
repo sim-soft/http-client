@@ -4,12 +4,17 @@
 
 | Version | Supported |
 | ------- | --------- |
-| 2.2.x   | Yes       |
-| 2.0–2.1 | No        |
+| 2.3.x   | Yes       |
+| 2.0–2.2 | No        |
 | 1.x     | No        |
 
-Security fixes are released for the latest 2.2.x patch line only. Upgrade to
+Security fixes are released for the latest 2.3.x patch line only. Upgrade to
 the current release before reporting an issue against an older version.
+
+2.3.0 fixes several security issues present in every earlier release, including
+header injection and OAuth2 token disclosure between users on a shared storage
+backend. See the [changelog](CHANGELOG.md) for details. Earlier lines will not
+receive backports, so upgrading is the only remedy.
 
 ## Reporting a Vulnerability
 
