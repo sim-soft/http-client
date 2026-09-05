@@ -21,12 +21,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # composer.json declares php ^8.1, so every supported minor is exercised.
-        php: ['8.1', '8.2', '8.3', '8.4']
+        # composer.json declares php ^8.2, so every supported minor is exercised.
+        php: ['8.2', '8.3', '8.4']
         dependencies: [highest]
         include:
           # Guards the lower bounds of the declared PSR constraints.
-          - php: '8.1'
+          - php: '8.2'
             dependencies: lowest
 
     steps:

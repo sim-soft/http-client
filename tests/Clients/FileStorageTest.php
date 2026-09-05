@@ -248,6 +248,8 @@ class FileStorageTest extends TestCase
         $this->assertIsArray($files);
         $this->assertCount(1, $files);
 
+        clearstatcache();
+
         $this->assertSame(0600, fileperms($files[0]) & 0777, 'Token file must be owner-only.');
         $this->assertSame(0700, fileperms($this->testDir) & 0777, 'Token directory must be owner-only.');
     }
@@ -272,6 +274,8 @@ class FileStorageTest extends TestCase
         chmod($dir, 0777);
 
         new FileStorage($dir);
+
+        clearstatcache();
 
         $mode = fileperms($dir) & 0777;
         rmdir($dir);
@@ -298,6 +302,8 @@ class FileStorageTest extends TestCase
         chmod($files[0], 0644);
 
         $this->storage->set('account', new TokenData(accessToken: 'second', tokenType: 'Bearer'));
+
+        clearstatcache();
 
         $this->assertSame(0600, fileperms($files[0]) & 0777);
 

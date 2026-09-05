@@ -71,6 +71,14 @@ fact, so they summarise each release rather than list every change.
 
 ### Fixed
 
+- **OAuth2 token permissions could be skipped on PHP 8.2.** `FileStorage`
+  returns early when a path already carries the intended mode, but read that
+  mode through `fileperms()` without clearing the stat cache. `chmod()` only
+  began invalidating that cache in PHP 8.3, so on 8.2 a path whose mode changed
+  earlier in the same process reported its old mode and the re-tightening
+  `chmod` was skipped. The cache is now cleared before the check. Found by
+  running the suite on Linux, where the POSIX permission tests are not skipped.
+
 - **PSR-18 no longer clobbers client configuration.** `sendRequest()` left the
   base URL pointing at the PSR-7 target after it returned, so a client used
   through both APIs — the pattern documented in `docs/PSR18.md` — sent every
@@ -310,6 +318,11 @@ fact, so they summarise each release rather than list every change.
 - This changelog and a security policy.
 
 ### Changed
+
+- **Minimum PHP raised from 8.1 to 8.2.** PHPUnit 11 requires PHP >= 8.2, so
+  the declared `^8.1` support could not be exercised by the test suite at all —
+  8.1 was claimed but never verified. The CI matrix, badges and documentation
+  now cover 8.2 through 8.4.
 
 - `withHeader()` and `withHeaders()` had inaccurate `@param` annotations
   (`array<string, mixed>` where a list is also accepted); corrected.

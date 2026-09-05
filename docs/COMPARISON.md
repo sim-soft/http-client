@@ -4,7 +4,7 @@
 
 | Feature                       | **Simsoft HttpClient**             | **Guzzle**                                 | **Symfony HttpClient**            | **Laravel HTTP Client** |
 |-------------------------------|------------------------------------|--------------------------------------------|-----------------------------------|-------------------------|
-| **PHP requirement**           | 8.1+                               | 7.2.5+                                     | 8.2+                              | 8.2+ (framework)        |
+| **PHP requirement**           | 8.2+                               | 7.2.5+                                     | 8.2+                              | 8.2+ (framework)        |
 | **Dependencies**              | `ext-curl` only                    | `psr/http-*`, `psr/log`, optional adapters | None (native PHP streams or curl) | Wraps Guzzle            |
 | **Architecture**              | Single class + traits, direct cURL | Handler stack, middleware, promises        | Contracts + multiple transports   | Facade over Guzzle      |
 | **PSR-18**                    | ✅                                  | ✅                                          | ✅ (adapter)                       | ❌ (Guzzle underneath)   |

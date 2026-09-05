@@ -1,7 +1,7 @@
 # Simsoft HttpClient
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![PHP Version](https://img.shields.io/badge/PHP-%5E8.1-8892BF.svg)](https://www.php.net/)
+[![PHP Version](https://img.shields.io/badge/PHP-%5E8.2-8892BF.svg)](https://www.php.net/)
 
 ## Introduction
 
@@ -21,7 +21,7 @@ echo $response->data('data.0.name'); // "John Doe"
 
 ## Requirements
 
-- PHP 8.1+
+- PHP 8.2+
 - ext-curl
 
 ## Install

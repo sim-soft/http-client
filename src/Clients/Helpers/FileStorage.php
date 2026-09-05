@@ -87,6 +87,12 @@ class FileStorage implements StorageInterface
      * the path; both are tolerated, since the alternative is refusing to store
      * a token that the caller has already obtained.
      *
+     * The stat cache is cleared before the mode is read. On PHP 8.2 chmod()
+     * does not invalidate that cache — it only began doing so in 8.3 — so a
+     * path whose mode changed earlier in the same process reports its old
+     * mode, and the early return below would skip the chmod that is the whole
+     * point of this method.
+     *
      * @param string $path The file or directory to restrict.
      * @param int $mode The octal permission mode to apply.
      * @return void
@@ -96,6 +102,8 @@ class FileStorage implements StorageInterface
         if (DIRECTORY_SEPARATOR === '\\') {
             return;
         }
+
+        clearstatcache(true, $path);
 
         if ((fileperms($path) & 0777) === $mode) {
             return;
