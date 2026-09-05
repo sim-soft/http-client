@@ -12,6 +12,7 @@ use Psr\Http\Client\RequestExceptionInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamInterface;
+use Psr\Http\Message\UriInterface;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Simsoft\HttpClient\Exceptions\NetworkException;
@@ -490,40 +491,31 @@ class HttpClient implements ClientInterface
     /**
      * PSR-18: Send a PSR-7 request object.
      *
+     * The PSR-7 request is authoritative for this send alone: it supplies the
+     * target URL, method, headers and body. Connection-scoped state that has
+     * to be overwritten to do that — the base URL — is restored afterwards, so
+     * a client may be driven through the fluent API and PSR-18 interchangeably
+     * in either order.
+     *
+     * A connection-scoped credential set with withBearerToken() is withheld
+     * when the request targets an origin other than the configured base URL,
+     * mirroring the way cURL drops Authorization across a cross-host redirect.
+     * A client with no base URL has no origin to conflict with, so its token
+     * is applied as usual.
+     *
+     * @param RequestInterface $request
+     * @return ResponseInterface
      * @throws NetworkExceptionInterface
      * @throws RequestExceptionInterface
      */
     public function sendRequest(RequestInterface $request): ResponseInterface
     {
+        $previousBaseUrl = $this->baseUrl;
+        $previousPersistent = $this->persistentHeaders;
         $previousThrowOnError = $this->throwOnError;
         $this->throwOnError = false;
 
-        // Translate PSR-7 request into internal state
-        $uri = $request->getUri();
-
-        $base = $uri->getScheme() . '://' . $uri->getAuthority();
-        $path = $uri->getPath();
-
-        $this->withBaseUrl($base);
-        $this->resource($path);
-
-        if ($uri->getQuery() !== '') {
-            $queryParams = [];
-            parse_str($uri->getQuery(), $queryParams);
-            if ($queryParams !== []) {
-                $this->withQuery($queryParams);
-            }
-        }
-
-        foreach ($request->getHeaders() as $name => $values) {
-            $this->withHeader($name, $values);
-        }
-
-        $body = $request->getBody();
-        if ($body->getSize() !== 0) {
-            $contentType = $request->getHeaderLine('Content-Type') ?: null;
-            $this->withBody($body, $contentType);
-        }
+        $this->adoptPsrRequest($request);
 
         try {
             return $this
@@ -536,7 +528,77 @@ class HttpClient implements ClientInterface
             throw new NetworkException($request, $throwable->getMessage(), $throwable->getCode(), $throwable);
         } finally {
             $this->throwOnError = $previousThrowOnError;
+            $this->baseUrl = $previousBaseUrl;
+            $this->persistentHeaders = $previousPersistent;
+            $this->formattedHeaders = null;
         }
+    }
+
+    /**
+     * Translate a PSR-7 request into this client's request-scoped state.
+     *
+     * @param RequestInterface $request The request to adopt.
+     * @return void
+     * @throws InvalidArgumentException When a header name or value is illegal.
+     */
+    private function adoptPsrRequest(RequestInterface $request): void
+    {
+        $uri = $request->getUri();
+
+        if ($this->isForeignOrigin($uri)) {
+            $this->persistentHeaders = [];
+            $this->formattedHeaders = null;
+        }
+
+        $this->withBaseUrl($uri->getScheme() . '://' . $uri->getAuthority());
+        $this->resource($uri->getPath());
+
+        if ($uri->getQuery() !== '') {
+            $queryParams = [];
+            parse_str($uri->getQuery(), $queryParams);
+            $queryParams === [] || $this->withQuery($queryParams);
+        }
+
+        foreach ($request->getHeaders() as $name => $values) {
+            $this->withHeader($name, $values);
+        }
+
+        $body = $request->getBody();
+        if ($body->getSize() !== 0) {
+            $this->withBody($body, $request->getHeaderLine('Content-Type') ?: null);
+        }
+    }
+
+    /**
+     * Determine whether a PSR-7 target points at an origin other than the one
+     * this client is configured for.
+     *
+     * Comparison is on scheme and authority only, normalised for case, since
+     * that is the boundary a credential must not cross. A client with no base
+     * URL, or one whose base URL has no authority, is treated as having no
+     * origin of its own and therefore no conflict.
+     *
+     * @param UriInterface $uri The target of the PSR-7 request.
+     * @return bool True when the target origin differs from the base URL's.
+     */
+    private function isForeignOrigin(UriInterface $uri): bool
+    {
+        if ($this->persistentHeaders === [] || $this->baseUrl === '') {
+            return false;
+        }
+
+        $parts = parse_url($this->baseUrl);
+        if ($parts === false || !isset($parts['host'])) {
+            return false;
+        }
+
+        $host = $parts['host'];
+        if (isset($parts['port'])) {
+            $host .= ':' . $parts['port'];
+        }
+
+        return strcasecmp($parts['scheme'] ?? '', $uri->getScheme()) !== 0
+            || strcasecmp($host, $uri->getAuthority()) !== 0;
     }
 
     /**

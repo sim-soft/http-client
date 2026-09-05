@@ -94,7 +94,8 @@ try {
 
 ### Mixing PSR-18 and the fluent API
 
-Both APIs share the same underlying client instance. You can use them together:
+Both APIs share the same underlying client instance. You can use them together
+in either order:
 
 ```php
 $client = HttpClient::make();
@@ -107,6 +108,46 @@ $response = $client
 
 // PSR-18 — when passing to a third-party SDK
 $sdk = new SomeApiSdk(httpClient: $client);
+
+// The base URL and token are untouched by the SDK's PSR-18 sends
+$response = $client->get('/settings');  // still api.example.com, still authenticated
+```
+
+A `sendRequest()` call takes its target, method, headers and body from the
+PSR-7 request, and leaves the client's connection-scoped configuration as it
+found it.
+
+### Credentials and PSR-18
+
+A token set with `withBearerToken()` is **withheld when a PSR-7 request targets
+an origin other than the client's base URL**, matching how cURL drops
+`Authorization` across a cross-host redirect. This matters when handing a
+configured client to an SDK that talks to a different host:
+
+```php
+$client = HttpClient::make()
+    ->withBaseUrl('https://api.example.com')
+    ->withBearerToken('YOUR_TOKEN');
+
+// Same origin as the base URL — the token is sent
+$client->sendRequest($factory->createRequest('GET', 'https://api.example.com/users'));
+
+// Different origin — the token is NOT sent
+$client->sendRequest($factory->createRequest('GET', 'https://other-host.example/data'));
+```
+
+Scheme and authority must both match; a port difference counts as a different
+origin. A client with no base URL has no origin to conflict with, so its token
+is applied to every PSR-18 send.
+
+To authenticate a cross-origin request, set the header on the PSR-7 request
+itself — an explicit per-request `Authorization` always wins:
+
+```php
+$psrRequest = $factory->createRequest('GET', 'https://other-host.example/data')
+    ->withHeader('Authorization', 'Bearer OTHER_TOKEN');
+
+$client->sendRequest($psrRequest);  // Authorization: Bearer OTHER_TOKEN
 ```
 
 ---

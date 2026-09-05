@@ -71,6 +71,13 @@ Worth knowing when integrating:
   `withBearerToken()` persists on the client and is sent with every subsequent
   request, so treat a configured client as a credential-bearing object. Use
   `withoutBearerToken()` before handing it to unrelated code.
+- **PSR-18 sends do not carry the token off-origin.** `sendRequest()` withholds
+  a connection-scoped token when the PSR-7 request targets a scheme/authority
+  other than the client's base URL, so a client handed to a third-party SDK
+  does not disclose its credential to that SDK's host. An `Authorization`
+  header set on the PSR-7 request itself is the caller's explicit intent and is
+  always sent. A client with no base URL has no origin to compare against, so
+  its token applies to every PSR-18 send.
 - **Header names and values are validated.** Names must be RFC 7230 tokens;
   values may not contain CR, LF or NUL. Invalid input throws
   `InvalidArgumentException` rather than reaching the wire.
