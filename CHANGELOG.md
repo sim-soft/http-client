@@ -141,6 +141,55 @@ fact, so they summarise each release rather than list every change.
   string, and `null` is omitted, so a payload sent as multipart arrives in the
   same shape as one sent form-encoded.
 
+- **A chunked response with trailers lost every header.** cURL appends the
+  trailer block to the header buffer, and `Response` kept the last block
+  unconditionally, so `Content-Type`, `Set-Cookie` and the rest were replaced by
+  the trailers alone — which also broke JSON detection. The last block
+  introduced by a status line is now used, so a redirect chain still resolves to
+  the final hop.
+
+- **Duplicate headers differing only in case were dropped.** Header names were
+  lower-cased after grouping rather than before, giving `Set-Cookie` and
+  `set-cookie` separate buckets that were then collapsed to whichever came last.
+  A server varying the capitalisation across several `Set-Cookie` lines lost all
+  but one. Names are now normalised on insertion.
+
+- **PSR-7 `with*()` methods on `Response` shared the body stream.** Without a
+  `__clone()`, a clone copied the stream handle by reference, so reading through
+  one response advanced the other and closing one left the other empty. The
+  clone now rebuilds its stream on demand.
+
+- **`withBody()` was a no-op on a downloaded response.** The sink path takes
+  priority when the body is read back, so a replacement body was visible to
+  `getContents()` but ignored by `getRaw()`, `json()` and `data()`, which kept
+  returning the file from disk. The sink is now cleared.
+
+- **`withStatus()` accepted any integer.** Codes such as `0`, `-5` and `1000`
+  were stored and returned, in violation of PSR-7 and silently corrupting the
+  status helpers. Codes outside 100–599 now raise `InvalidArgumentException`.
+
+- **A downloaded body over 5 MB was replaced with a placeholder string.**
+  `FileStream::__toString()` returned `[Large Stream: N bytes]` past that size,
+  so `getRaw()` on a large download returned the placeholder and `json()` threw
+  a syntax error on it. The limit guarded nothing — `getContents()` always read
+  the whole file — and has been removed.
+
+- **`FileStream::eof()` reported true before any read**, because the handle is
+  opened lazily and the check ran against an unopened one, so a
+  `while (!$stream->eof())` loop read nothing at all.
+
+- **`FileStream::read(0)` consumed a byte** instead of returning the empty
+  string PSR-7 specifies, because the length was clamped to a minimum of 1.
+  A negative length now raises instead of being clamped.
+
+- **`data()` could not read a JSON null, and a trailing wildcard returned
+  nothing.** Path resolution used `isset()`, which cannot distinguish a field
+  the server sent as `null` from an absent one, so `{"a":null}` yielded the
+  default. A path ending in `*` — `items.*` — resolved to a list of nulls rather
+  than the items. Wildcard results are also no longer spliced together with
+  `array_merge()`: `items.*.tags` returns one entry per item, preserving each
+  item's own list instead of flattening them into an unindexable run.
+
 - **`withMultipart()` leaked an owned body stream.** Replacing a body set with
   `withBodyStream()` left the previous stream open and still marked as owned,
   unlike `withBody()` which closes it. It is now closed.
@@ -177,6 +226,15 @@ fact, so they summarise each release rather than list every change.
   instead of `files[]`.** A server that read the previous ragged nesting rather
   than a list will need updating; a server using a normal multipart parser
   receives the list it always expected.
+
+- **`data()` with a wildcard no longer flattens nested results.**
+  `items.*.tags` previously spliced every item's list into one flat run, so the
+  result length depended on the data and could not be indexed against the items.
+  It now returns one entry per item. A path whose leaf is a scalar is unchanged.
+
+- **`FileStream::__toString()` no longer truncates files over 5 MB** to a
+  `[Large Stream: N bytes]` placeholder. Code that tested for that string should
+  check `getSize()` instead.
 
 - **OAuth2 storage keys have a new composition.** Tokens, PKCE verifiers and
   CSRF states were stored under `{clientId}`, `{clientId}_pkce_verifier` and
