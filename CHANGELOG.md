@@ -43,6 +43,32 @@ fact, so they summarise each release rather than list every change.
   request itself is unaffected, and a client with no base URL has no origin to
   compare against.
 
+- **OAuth2 token disclosure between end users.** Cached tokens were keyed on the
+  client ID alone, so every caller sharing a storage backend read the same
+  entry. Two users of the same application were served each other's tokens, and
+  a sandbox client could read a production token — or a `read`-scoped client a
+  `write`-scoped one. The key now covers the client ID, the subject, the active
+  token endpoint and the requested scope. Bind a client to an end user with the
+  new `forSubject()`; a shared backend without it remains unsafe for
+  user-delegated tokens.
+
+- **OAuth2 privilege substitution after a user's token expired.** When a token
+  obtained through the authorization code flow expired and could not be
+  refreshed, the client fell back to a `client_credentials` request and stored
+  the application's own token under the user's key. Every later call then acted
+  with the application's authority while appearing to act with the user's. A
+  code exchange now records its grant in the token's metadata, a subject-bound
+  client will not acquire a token unattended, and both cases raise instead of
+  substituting.
+
+- **OAuth2 single-use CSRF state.** `validateState()` compared the stored state
+  with `!==` and removed it only after a successful exchange, so a state could
+  be replayed and the comparison leaked timing. The state is now consumed before
+  it is compared, and compared with `hash_equals()`. State and PKCE verifier are
+  also stored per composed key, so concurrent authorization flows no longer
+  overwrite one another — previously a second user starting a flow made the
+  first user's callback fail as a suspected CSRF attack.
+
 ### Fixed
 
 - **PSR-18 no longer clobbers client configuration.** `sendRequest()` left the
@@ -69,9 +95,37 @@ fact, so they summarise each release rather than list every change.
   configuration — TLS verification, redirect policy, `withOptions()` and retry
   settings — is deliberately preserved.
 
+- **A corrupt cached token no longer bricks an OAuth2 client permanently.** An
+  unreadable storage entry — truncated, evicted mid-write, hand-edited — made
+  `unserialize()` emit a warning and return `false`, which was then treated as a
+  cached token; the entry was never replaced, so every subsequent call failed
+  for as long as the file existed. Under a framework that promotes warnings to
+  exceptions the failure escaped as an uncaught `ErrorException`. Anything that
+  is not a `TokenData` is now discarded along with its storage entry, and
+  `unserialize()` is restricted to that one class.
+
+- **Token endpoint responses without a token are rejected.** A 2xx response was
+  taken as success without checking its body, so a provider returning an
+  RFC 6749 §5.2 error with a 200 — or a 200 with no `access_token` at all —
+  produced an empty credential that was cached and then sent as `Bearer `,
+  turning a diagnosable configuration fault into 401s from the resource server.
+  Both are now reported, with the provider's `error` and `error_description`
+  when present.
+
+- **`SessionStorage` no longer discards tokens silently.** The constructor
+  ignored a failed `session_start()`, so where the session could not be started
+  — headers already sent, save handler unavailable — tokens were written into a
+  `$_SESSION` that was never persisted, and every request re-fetched a token. It
+  now throws instead.
+
 ### Added
 
 - `withoutBearerToken()` removes a connection-scoped token from a client.
+- `OAuth2::forSubject()` binds a client's cached token to an end user, so a
+  shared storage backend does not serve one user's token to another.
+- `OAuth2TokenResponse::getError()` returns the provider's `error` — combined
+  with `error_description` when present — or `null` when the response carries
+  no OAuth2 error.
 - CI covering PHP 8.1 through 8.4, a lowest-dependency run, PHPStan level 8,
   PHPMD and PHPCS.
 - This changelog and a security policy.
@@ -80,6 +134,15 @@ fact, so they summarise each release rather than list every change.
 
 - `withHeader()` and `withHeaders()` had inaccurate `@param` annotations
   (`array<string, mixed>` where a list is also accepted); corrected.
+
+- **OAuth2 storage keys have a new composition.** Tokens, PKCE verifiers and
+  CSRF states were stored under `{clientId}`, `{clientId}_pkce_verifier` and
+  `{clientId}_oauth_state`; they are now stored under a key derived from the
+  client ID, subject, token endpoint and scope. Existing cached entries are not
+  found under the new key and are simply re-acquired on the next call. Code that
+  reads or writes these entries directly — rather than through the client — must
+  be updated; an authorization flow in progress across the upgrade will need to
+  be restarted.
 
 ## [2.2.4] - 2026-06-24
 

@@ -86,4 +86,29 @@ class OAuth2TokenResponse extends Response
         $value = $this->data('scope');
         return $value !== null ? (string)$value : null;
     }
+
+    /**
+     * Get the OAuth2 error from the response, if any (RFC 6749 §5.2).
+     *
+     * Combines the `error` code with `error_description` when the server
+     * supplies one. Not every provider signals failure with a 4xx status, so
+     * this must be consulted even on a 2xx response.
+     *
+     * @return string|null The error code and description, or null if the
+     *                     response reported no error.
+     */
+    public function getError(): ?string
+    {
+        $error = $this->data('error');
+
+        if ($error === null || $error === '') {
+            return null;
+        }
+
+        $description = $this->data('error_description');
+
+        return $description !== null && $description !== ''
+            ? sprintf('%s: %s', (string)$error, (string)$description)
+            : (string)$error;
+    }
 }

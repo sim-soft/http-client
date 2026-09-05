@@ -39,10 +39,10 @@ trait OAuth2AuthCodeTrait
         $endpoint = $this->getAuthorizeEndpoint();
 
         $verifier = $this->generateCodeVerifier();
-        $this->storage->set("{$this->clientId}_pkce_verifier", $verifier);
+        $this->storage->set($this->storageKey('pkce_verifier'), $verifier);
 
         $state = $this->generateState();
-        $this->storage->set("{$this->clientId}_oauth_state", $state);
+        $this->storage->set($this->storageKey('oauth_state'), $state);
 
         $codeChallenge = $this->generateCodeChallenge($verifier);
 
@@ -75,16 +75,10 @@ trait OAuth2AuthCodeTrait
         $params = $this->buildCodeExchangeParams($code, $verifier);
         $response = $this->buildTokenRequest($params);
 
-        if (!$response->successful()) {
-            throw new RuntimeException(sprintf(
-                'Code exchange failed [HTTP %d]: %s',
-                $response->getStatusCode(),
-                $response->getMessage() ?? 'Unknown error'
-            ));
-        }
+        $this->assertTokenResponse($response, 'Code exchange');
 
-        $tokenData = $this->parseTokenResponse($response);
-        $this->storage->set($this->clientId, $tokenData);
+        $tokenData = $this->markUserDelegated($this->parseTokenResponse($response));
+        $this->storage->set($this->storageKey(), $tokenData);
 
         return $tokenData;
     }
@@ -235,28 +229,33 @@ trait OAuth2AuthCodeTrait
     /**
      * Validate the OAuth state parameter against the stored value.
      *
+     * The stored state is consumed whether or not it matches: a state is
+     * single-use, and leaving a failed one in place would let an attacker keep
+     * guessing against it. Comparison is timing-safe.
+     *
      * @param string $state The state parameter from the callback.
      * @return void
      * @throws RuntimeException When state is missing or mismatched.
      */
     private function validateState(string $state): void
     {
-        $storedState = $this->storage->get("{$this->clientId}_oauth_state");
+        $key = $this->storageKey('oauth_state');
+        $storedState = $this->storage->get($key);
 
-        if ($storedState === null) {
+        if (!is_string($storedState) || $storedState === '') {
             throw new RuntimeException(sprintf(
                 'No stored state found for client "%s". The authorization flow may have expired or was not initiated.',
                 $this->clientId
             ));
         }
 
-        if ($state !== $storedState) {
+        $this->storage->remove($key);
+
+        if (!hash_equals($storedState, $state)) {
             throw new RuntimeException(
                 'State parameter mismatch: possible CSRF attack. Expected stored state does not match callback state.'
             );
         }
-
-        $this->storage->remove("{$this->clientId}_oauth_state");
     }
 
     /**
@@ -267,16 +266,17 @@ trait OAuth2AuthCodeTrait
      */
     private function consumeVerifier(): string
     {
-        $verifier = $this->storage->get("{$this->clientId}_pkce_verifier");
+        $key = $this->storageKey('pkce_verifier');
+        $verifier = $this->storage->get($key);
 
-        if ($verifier === null) {
+        if (!is_string($verifier) || $verifier === '') {
             throw new RuntimeException(sprintf(
                 'No stored PKCE verifier found for client "%s". The authorization flow may have expired or was not initiated.',
                 $this->clientId
             ));
         }
 
-        $this->storage->remove("{$this->clientId}_pkce_verifier");
+        $this->storage->remove($key);
 
         return $verifier;
     }

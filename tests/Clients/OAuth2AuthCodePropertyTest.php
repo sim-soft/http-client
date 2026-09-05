@@ -334,8 +334,8 @@ class OAuth2AuthCodePropertyTest extends TestCase
     /**
      * Property 5: URL generation stores verifier and state.
      *
-     * After getAuthorizationUrl(), storage has both {clientId}_pkce_verifier
-     * and {clientId}_oauth_state.
+     * After getAuthorizationUrl(), storage has both the pkce_verifier and the
+     * oauth_state entry for the client's composed storage key.
      *
      * **Validates: Requirements 2.5, 3.1, 3.2**
      *
@@ -352,15 +352,15 @@ class OAuth2AuthCodePropertyTest extends TestCase
 
                 $client->getAuthorizationUrl();
 
-                $hasVerifier = $storage->has("{$clientId}_pkce_verifier");
-                $hasState = $storage->has("{$clientId}_oauth_state");
+                $hasVerifier = $storage->has($client->exposedStorageKey('pkce_verifier'));
+                $hasState = $storage->has($client->exposedStorageKey('oauth_state'));
 
                 // Verifier should be a non-empty string
-                $verifier = $storage->get("{$clientId}_pkce_verifier");
+                $verifier = $storage->get($client->exposedStorageKey('pkce_verifier'));
                 $validVerifier = is_string($verifier) && $verifier !== '';
 
                 // State should be a non-empty string
-                $state = $storage->get("{$clientId}_oauth_state");
+                $state = $storage->get($client->exposedStorageKey('oauth_state'));
                 $validState = is_string($state) && $state !== '';
 
                 return $hasVerifier && $hasState && $validVerifier && $validState;
@@ -399,8 +399,8 @@ class OAuth2AuthCodePropertyTest extends TestCase
                 $client = new AuthCodeTestOAuth2($clientId, 'secret', $storage);
 
                 // Manually store state and verifier
-                $storage->set("{$clientId}_oauth_state", $storedState);
-                $storage->set("{$clientId}_pkce_verifier", 'some-verifier');
+                $storage->set($client->exposedStorageKey('oauth_state'), $storedState);
+                $storage->set($client->exposedStorageKey('pkce_verifier'), 'some-verifier');
 
                 $threw = false;
                 try {
@@ -445,7 +445,7 @@ class OAuth2AuthCodePropertyTest extends TestCase
                 $state = $params['state'];
 
                 // Get the stored verifier before exchange removes it
-                $verifier = $storage->get("{$clientId}_pkce_verifier");
+                $verifier = $storage->get($client->exposedStorageKey('pkce_verifier'));
 
                 $client->exchangeCode($code, $state);
 
@@ -505,7 +505,7 @@ class OAuth2AuthCodePropertyTest extends TestCase
 
                 $client->exchangeCode('auth-code', $state);
 
-                $stored = $storage->get($clientId);
+                $stored = $storage->get($client->exposedStorageKey());
 
                 return $stored instanceof TokenData
                     && $stored->accessToken === $accessToken
@@ -586,12 +586,12 @@ class OAuth2AuthCodePropertyTest extends TestCase
                 $state = $params['state'];
 
                 // Verify state exists before exchange
-                $stateExistsBefore = $storage->has("{$clientId}_oauth_state");
+                $stateExistsBefore = $storage->has($client->exposedStorageKey('oauth_state'));
 
                 $client->exchangeCode('auth-code', $state);
 
                 // Verify state is removed after exchange
-                $stateExistsAfter = $storage->has("{$clientId}_oauth_state");
+                $stateExistsAfter = $storage->has($client->exposedStorageKey('oauth_state'));
 
                 return $stateExistsBefore && !$stateExistsAfter;
             }
@@ -708,7 +708,7 @@ class OAuth2AuthCodePropertyTest extends TestCase
 
                 $client->exchangeCode('auth-code', $state);
 
-                $stored = $storage->get($clientId);
+                $stored = $storage->get($client->exposedStorageKey());
 
                 return $stored instanceof TokenData
                     && $stored->scope === $customScope;

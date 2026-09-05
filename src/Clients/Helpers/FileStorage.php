@@ -4,6 +4,7 @@ namespace Simsoft\HttpClient\Clients\Helpers;
 
 use Simsoft\HttpClient\Clients\TokenData;
 use Simsoft\HttpClient\Interfaces\StorageInterface;
+use Throwable;
 
 /**
  * FileStorage class.
@@ -116,11 +117,25 @@ class FileStorage implements StorageInterface
 
         $contents = file_get_contents($path);
 
-        if ($contents === false) {
+        if ($contents === false || $contents === '') {
             return null;
         }
 
-        return unserialize($contents, ['allowed_classes' => [TokenData::class]]);
+        // A truncated or hand-edited file is a normal condition for a cache in
+        // a shared temp directory, not a programming error, so it is reported
+        // as an absent value rather than as a PHP warning the caller cannot
+        // act on. The @ covers the default handler; the catch covers frameworks
+        // that promote warnings to ErrorException, where an uncaught throw
+        // would leave the client unable to replace the very file that broke it.
+        // serialize(false) is the one legitimate value indistinguishable from a
+        // failure, and is not a TokenData.
+        try {
+            $value = @unserialize($contents, ['allowed_classes' => [TokenData::class]]);
+        } catch (Throwable) {
+            return null;
+        }
+
+        return $value === false ? null : $value;
     }
 
     /**
