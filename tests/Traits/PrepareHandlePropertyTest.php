@@ -101,8 +101,7 @@ class PrepareHandlePropertyTest extends TestCase
         string $headerKey,
         string $headerVal,
         string $bodyType
-    ): bool
-    {
+    ): bool {
         $client = HttpClient::make();
         $baseUrl = 'https://example.com';
 
@@ -244,11 +243,10 @@ class PrepareHandlePropertyTest extends TestCase
      */
     private function verifyHeaders(
         HttpClient $client,
-        string     $headerKey,
-        string     $headerVal,
-        string     $requestId
-    ): bool
-    {
+        string $headerKey,
+        string $headerVal,
+        string $requestId
+    ): bool {
         $formattedHeaders = $this->getFormattedHeaders($client);
 
         if ($formattedHeaders === null) {

@@ -235,7 +235,11 @@ trait PrepareHandleTrait
             unset($this->options[CURLOPT_UPLOAD]);
         }
 
-        $this->options[CURLOPT_READFUNCTION] = static function ($curlHandle, $inFile, int $length) use ($stream): string {
+        $this->options[CURLOPT_READFUNCTION] = static function (
+            $curlHandle,
+            $inFile,
+            int $length
+        ) use ($stream): string {
             unset($curlHandle, $inFile); // required by cURL callback signature
             return $stream->eof() ? '' : $stream->read($length);
         };

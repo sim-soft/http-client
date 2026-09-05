@@ -271,7 +271,8 @@ trait OAuth2AuthCodeTrait
 
         if (!is_string($verifier) || $verifier === '') {
             throw new RuntimeException(sprintf(
-                'No stored PKCE verifier found for client "%s". The authorization flow may have expired or was not initiated.',
+                'No stored PKCE verifier found for client "%s". The authorization '
+                . 'flow may have expired or was not initiated.',
                 $this->clientId
             ));
         }

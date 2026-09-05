@@ -264,7 +264,8 @@ class HttpClient implements ClientInterface
         match ($this->method) {
             'GET' => null, // the default CURL method is GET, no setting needed.
             'POST' => $this->options[CURLOPT_POST] = true,
-            default => $this->options[CURLOPT_CUSTOMREQUEST] = $this->method, //'PUT', 'PATCH', 'DELETE' or another non-standard verb.
+            // 'PUT', 'PATCH', 'DELETE' or another non-standard verb.
+            default => $this->options[CURLOPT_CUSTOMREQUEST] = $this->method,
         };
         return $this;
     }
@@ -669,8 +670,12 @@ class HttpClient implements ClientInterface
                     default => match (true) {
                         $data instanceof StreamInterface => $this->withBody($data),
                         is_string($data) => $this->withBody($data, 'text/plain'),
-                        is_array($data) => strtoupper($method) === 'GET' ? $this->withQuery($data) : $this->withMultipart($data),
-                        default => throw new InvalidArgumentException('Unsupported data type: ' . get_debug_type($data)),
+                        is_array($data) => strtoupper($method) === 'GET'
+                            ? $this->withQuery($data)
+                            : $this->withMultipart($data),
+                        default => throw new InvalidArgumentException(
+                            'Unsupported data type: ' . get_debug_type($data)
+                        ),
                     },
                 };
             }

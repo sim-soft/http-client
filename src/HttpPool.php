@@ -261,7 +261,9 @@ class HttpPool
      * whether clients are FakeHttpClient (direct execution) or real
      * HttpClient (curl_multi concurrent execution).
      *
-     * @param array<int|string, HttpClient|Closure> $requests Array of HttpClient instances or closures returning HttpClient.
+     * @param array<int|string, HttpClient|Closure> $requests Array of HttpClient
+     *                                                        instances or closures
+     *                                                        returning HttpClient.
      *
      * @return HttpPoolResult
      *
@@ -567,12 +569,11 @@ class HttpPool
      */
     private function addHandleToMulti(
         CurlMultiHandle $multiHandle,
-        HttpClient      $client,
-        int|string      $index,
-        array           &$headerBuffers,
+        HttpClient $client,
+        int|string $index,
+        array &$headerBuffers,
         SplObjectStorage $handleToIndex
-    ): void
-    {
+    ): void {
         $handle = $client->buildHandle();
 
         if ($this->timeout > 0) {
@@ -580,11 +581,15 @@ class HttpPool
         }
 
         $headerBuffers[$index] = '';
-        curl_setopt($handle, CURLOPT_HEADERFUNCTION, static function ($curlHandle, $header) use ($index, &$headerBuffers) {
-            unset($curlHandle); // required by cURL callback signature
-            $headerBuffers[$index] .= $header;
-            return strlen($header);
-        });
+        curl_setopt(
+            $handle,
+            CURLOPT_HEADERFUNCTION,
+            static function ($curlHandle, $header) use ($index, &$headerBuffers) {
+                unset($curlHandle); // required by cURL callback signature
+                $headerBuffers[$index] .= $header;
+                return strlen($header);
+            }
+        );
 
         $handleToIndex->attach($handle, $index);
         curl_multi_add_handle($multiHandle, $handle);
@@ -608,8 +613,7 @@ class HttpPool
         int|string $index,
         array $headerBuffers,
         array $clients = [],
-    ): Response
-    {
+    ): Response {
         $curlInfo = curl_getinfo($handle);
         $body = (string)curl_multi_getcontent($handle);
         $curlError = curl_error($handle);

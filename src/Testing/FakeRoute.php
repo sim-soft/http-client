@@ -28,8 +28,7 @@ final class FakeRoute
     public function __construct(
         private readonly string|Closure $matcher,
         private readonly array $responses,
-    )
-    {
+    ) {
         // A route with nothing to return matches a request and then fails
         // inside nextResponse() with an undefined-index warning and a
         // TypeError, pointing at the library rather than at the empty

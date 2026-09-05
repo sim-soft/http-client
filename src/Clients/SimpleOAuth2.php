@@ -53,8 +53,7 @@ abstract class SimpleOAuth2 extends HttpClient
         protected string $clientId,
         protected string $clientSecret,
         ?StorageInterface $storage = null,
-    )
-    {
+    ) {
         $this->storage = $storage ?? new SessionStorage($this->tokenStorageName);
     }
 
@@ -70,8 +69,7 @@ abstract class SimpleOAuth2 extends HttpClient
         string $clientId,
         string $clientSecret,
         ?StorageInterface $storage = null,
-    ): static
-    {
+    ): static {
         return new static($clientId, $clientSecret, $storage);
     }
 

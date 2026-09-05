@@ -93,8 +93,11 @@ trait AttachmentTrait
      * @return string|CURLFile
      * @throws Exception
      */
-    protected function normalizeAttachment(mixed $file, ?string $filename = null, ?string $mimeType = null): string|CURLFile
-    {
+    protected function normalizeAttachment(
+        mixed $file,
+        ?string $filename = null,
+        ?string $mimeType = null
+    ): string|CURLFile {
         if ($file instanceof CURLFile) {
             return $this->normalizeCurlFileAttachment($file, $filename);
         }

@@ -88,12 +88,11 @@ jobs:
       - name: Install dependencies
         uses: ramsey/composer-install@v3
 
-      # Reports only. The repository carries pre-existing PSR-12 formatting
-      # violations, so this is not yet a merge gate; make it blocking once
-      # they are cleared.
+      # Blocking. Configuration lives in phpcs.xml, which applies PSR-12 to
+      # src and tests and exempts test fixtures from the one-class-per-file
+      # rule.
       - name: PHPCS
-        continue-on-error: true
-        run: vendor/bin/phpcs --standard=PSR12 src tests --report=full
+        run: vendor/bin/phpcs --report=full
 
   composer-validate:
     name: Validate composer.json

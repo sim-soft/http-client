@@ -56,7 +56,9 @@
     "test": "phpunit --use-baseline baseline.xml tests",
     "qc": [
       "phpstan analyse --memory-limit=512M",
-      "phpmd src text phpmd.xml"
-    ]
+      "phpmd src text phpmd.xml",
+      "phpcs"
+    ],
+    "cs-fix": "phpcbf"
   }
 }

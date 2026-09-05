@@ -51,13 +51,12 @@ class Response implements ResponseInterface
      */
     final public function __construct(
         protected array|false $curlInfo = false,
-        protected string  $body = '',
-        protected string  $message = '',
+        protected string $body = '',
+        protected string $message = '',
         protected ?string $sinkPath = null,
-        protected int     $errno = 0,
-        protected string  $rawHeaders = '',
-    )
-    {
+        protected int $errno = 0,
+        protected string $rawHeaders = '',
+    ) {
         $this->statusCode = $curlInfo['http_code'] ?? 0;
         $this->setHeaders($rawHeaders);
     }

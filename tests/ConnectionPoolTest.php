@@ -266,7 +266,11 @@ class ConnectionPoolTest extends TestCase
             static fn(string $name): bool => str_contains($name, 'pool')
                 || str_contains($name, 'Pool')
         );
-        $this->assertSame(['getPoolSinkPath'], array_values($poolMethods), 'Only getPoolSinkPath should reference "pool" in its name');
+        $this->assertSame(
+            ['getPoolSinkPath'],
+            array_values($poolMethods),
+            'Only getPoolSinkPath should reference "pool" in its name'
+        );
     }
 
     /**

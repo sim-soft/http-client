@@ -40,7 +40,8 @@ abstract class Stream implements StreamInterface
      * it returns null for a specific key or an empty array if no key is given.
      *
      * @param string|null $key The specific metadata key to retrieve or null to retrieve all metadata.
-     * @return mixed The value of the specified metadata key, an array of all metadata, or null if the stream is detached.
+     * @return mixed The value of the specified metadata key, an array of all
+     *               metadata, or null if the stream is detached.
      */
     public function getMetadata(?string $key = null): mixed
     {

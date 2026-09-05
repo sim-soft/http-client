@@ -179,11 +179,13 @@ class OAuth2AuthCodePropertyTest extends TestCase
 
                 // Must contain all required parameters
                 $hasClientId = isset($params['client_id']) && $params['client_id'] === $clientId;
-                $hasRedirectUri = isset($params['redirect_uri']) && $params['redirect_uri'] === 'https://myapp.com/callback';
+                $hasRedirectUri = isset($params['redirect_uri'])
+                    && $params['redirect_uri'] === 'https://myapp.com/callback';
                 $hasResponseType = isset($params['response_type']) && $params['response_type'] === 'code';
                 $hasState = isset($params['state']) && $params['state'] !== '';
                 $hasCodeChallenge = isset($params['code_challenge']) && $params['code_challenge'] !== '';
-                $hasChallengeMethod = isset($params['code_challenge_method']) && $params['code_challenge_method'] === 'S256';
+                $hasChallengeMethod = isset($params['code_challenge_method'])
+                    && $params['code_challenge_method'] === 'S256';
 
                 // Scope should NOT be present (AuthCodeTestOAuth2 has no scope)
                 $noScope = !isset($params['scope']);

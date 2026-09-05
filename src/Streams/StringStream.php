@@ -28,7 +28,9 @@ class StringStream extends Stream
     /**
      * Converts the object to its string representation.
      *
-     * @return string The string representation of the object. Returns an empty string if the object is detached; otherwise, returns the content property.
+     * @return string The string representation of the object. Returns an empty
+     *                string if the object is detached; otherwise, returns the
+     *                content property.
      */
     public function __toString(): string
     {
@@ -42,7 +44,9 @@ class StringStream extends Stream
     /**
      * Closes the object and resets its state.
      *
-     * @return void This method does not return a value. It clears the content, resets the position and content length, and marks the object as detached.
+     * @return void This method does not return a value. It clears the content,
+     *              resets the position and content length, and marks the object
+     *              as detached.
      */
     public function close(): void
     {
@@ -151,7 +155,8 @@ class StringStream extends Stream
     }
 
     /**
-     * Writes the given string to the current position in the content, adjusting the content length and position accordingly.
+     * Writes the given string to the current position in the content, adjusting
+     * the content length and position accordingly.
      *
      * @param string $string The string to be written into the content.
      * @return int The length of the string written to the content.
@@ -192,7 +197,8 @@ class StringStream extends Stream
      * Reads a specified number of characters from the content.
      *
      * @param int $length The number of characters to read. Must be greater than or equal to 0.
-     * @return string The read characters. Returns an empty string if the end of the content is reached or if the length is 0.
+     * @return string The read characters. Returns an empty string if the end of
+     *                the content is reached or if the length is 0.
      */
     public function read(int $length): string
     {
@@ -215,7 +221,9 @@ class StringStream extends Stream
     /**
      * Retrieves the remaining contents and updates the position to the end.
      *
-     * @return string The remaining portion of the content from the current position. Returns an empty string if at the end of the content or if the object is not attached.
+     * @return string The remaining portion of the content from the current
+     *                position. Returns an empty string if at the end of the
+     *                content or if the object is not attached.
      */
     public function getContents(): string
     {

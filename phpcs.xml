@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<ruleset name="simsoft/http-client">
+    <description>PSR-12 with test-fixture exemptions.</description>
+
+    <file>src</file>
+    <file>tests</file>
+
+    <arg name="colors"/>
+    <arg value="p"/>
+
+    <rule ref="PSR12"/>
+
+    <!--
+        Test doubles are declared alongside the test that uses them: a fake
+        transport, an OAuth2 subclass with one endpoint blanked out, a host
+        object for a trait. They are fixtures of a single test file, not
+        library code, and moving each to its own file would scatter the suite
+        without making any of it clearer. Autoloading is unaffected — these
+        classes are never resolved by PSR-4.
+    -->
+    <rule ref="PSR1.Classes.ClassDeclaration.MultipleClasses">
+        <exclude-pattern>tests/*</exclude-pattern>
+    </rule>
+
+    <!--
+        Bootstrapping a test file (declaring fixtures beside the test class)
+        trips the side-effect sniff for the same reason.
+    -->
+    <rule ref="PSR1.Files.SideEffects.FoundWithSymbols">
+        <exclude-pattern>tests/*</exclude-pattern>
+    </rule>
+</ruleset>

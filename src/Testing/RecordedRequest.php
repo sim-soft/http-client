@@ -24,7 +24,6 @@ final class RecordedRequest
         public readonly string $url,
         public readonly array $headers,
         public readonly mixed $body,
-    )
-    {
+    ) {
     }
 }

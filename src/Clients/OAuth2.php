@@ -96,8 +96,7 @@ abstract class OAuth2
         protected string $clientId,
         protected string $clientSecret,
         ?StorageInterface $storage = null,
-    )
-    {
+    ) {
         $this->storage = $storage ?? new FileStorage();
     }
 
@@ -113,8 +112,7 @@ abstract class OAuth2
         string $clientId,
         string $clientSecret,
         ?StorageInterface $storage = null,
-    ): static
-    {
+    ): static {
         return new static($clientId, $clientSecret, $storage);
     }
 
