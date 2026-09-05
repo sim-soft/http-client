@@ -206,7 +206,7 @@ class PoolBuilderTest extends TestCase
 
         $client = $builder->get('/protected');
 
-        $headers = $this->getClientProperty($client, 'headers');
+        $headers = $this->getClientProperty($client, 'persistentHeaders');
 
         $this->assertSame(['Bearer my-token'], $headers['authorization']);
     }
@@ -287,6 +287,9 @@ class PoolBuilderTest extends TestCase
         $this->assertSame('https://api.example.com', $this->getClientProperty($postClient, 'baseUrl'));
         $this->assertSame('https://api.example.com', $this->getClientProperty($deleteClient, 'baseUrl'));
 
-        $this->assertSame(['Bearer token123'], $this->getClientProperty($getClient, 'headers')['authorization']);
+        $this->assertSame(
+            ['Bearer token123'],
+            $this->getClientProperty($getClient, 'persistentHeaders')['authorization']
+        );
     }
 }

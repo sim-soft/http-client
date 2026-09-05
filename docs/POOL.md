@@ -151,6 +151,12 @@ $result = HttpPool::run(function (PoolBuilder $pool) {
 });
 ```
 
+Without `asJson()`, an array body is sent as multipart form data. A string body
+is sent raw and a `StreamInterface` is used as the body regardless of the mode;
+any other type raises `InvalidArgumentException`. The verb you asked for is
+always the verb sent — `$pool->put()` sends a PUT whether or not it carries a
+body.
+
 Since `$pool->get()`, `$pool->post()`, etc. return `HttpClient` instances, you
 can chain any HttpClient method on individual requests — middleware, JSON mode,
 custom headers, timeouts:
@@ -196,8 +202,14 @@ $result = HttpPool::create()->send([
 ]);
 ```
 
-Each clone gets its own cURL handle — the shared configuration is copied, but
-the connections are independent, so concurrent execution is safe.
+Cloning keeps each request's configuration separate: a clone is configured
+independently, so `resource()` on one does not affect another. Cloning is not
+required for the pool to run them concurrently — the pool gives every transfer a
+cURL handle of its own — but it is the clearest way to vary one thing at a time
+against a shared base.
+
+Every client is reset once its transfer completes, so it holds no leftover URL,
+method, query or body afterwards and can be reused for another request.
 
 ## Named Requests
 
@@ -507,6 +519,11 @@ transparently with the existing API.
 
 This gives you connection reuse benefits (keep-alive, session caching) without
 any code changes.
+
+This applies to sequential requests. Concurrent requests each get a handle of
+their own, because a cURL handle can only carry one transfer at a time and
+`curl_multi` will not accept the same handle twice — so a client shared between
+two entries of one batch, or retried by the pool, still executes correctly.
 
 ### HTTP/2 Multiplexing in HttpPool
 

@@ -101,8 +101,7 @@ class PrepareHandlePropertyTest extends TestCase
         string $headerKey,
         string $headerVal,
         string $bodyType
-    ): bool
-    {
+    ): bool {
         $client = HttpClient::make();
         $baseUrl = 'https://example.com';
 
@@ -191,6 +190,9 @@ class PrepareHandlePropertyTest extends TestCase
     /**
      * Verify that CURLOPT_URL contains the correct URL.
      *
+     * The base URL and the resource are joined by exactly one slash, so the
+     * expectation is built the same way rather than by concatenation.
+     *
      * @param array<int, mixed> $options The cURL options.
      * @param string $baseUrl The base URL.
      * @param string $url The pending URL path.
@@ -202,7 +204,7 @@ class PrepareHandlePropertyTest extends TestCase
             return false;
         }
 
-        $expectedUrl = $baseUrl . $url;
+        $expectedUrl = rtrim($baseUrl, '/') . '/' . ltrim($url, '/');
 
         return str_starts_with($options[CURLOPT_URL], $expectedUrl);
     }
@@ -241,11 +243,10 @@ class PrepareHandlePropertyTest extends TestCase
      */
     private function verifyHeaders(
         HttpClient $client,
-        string     $headerKey,
-        string     $headerVal,
-        string     $requestId
-    ): bool
-    {
+        string $headerKey,
+        string $headerVal,
+        string $requestId
+    ): bool {
         $formattedHeaders = $this->getFormattedHeaders($client);
 
         if ($formattedHeaders === null) {

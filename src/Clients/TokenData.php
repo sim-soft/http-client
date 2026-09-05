@@ -28,8 +28,7 @@ final class TokenData
         public readonly ?string $tokenType = null,
         public readonly ?string $scope = null,
         public readonly array $metadata = [],
-    )
-    {
+    ) {
     }
 
     /**

@@ -59,11 +59,6 @@ class FileStream extends Stream
         }
 
         try {
-            $size = $this->getSize();
-            if ($size !== null && $size > 5 * 1024 * 1024) { // 5MB limit
-                return "[Large Stream: {$size} bytes]";
-            }
-
             $this->rewind();
             return $this->getContents();
         } catch (Exception $throwable) {
@@ -140,7 +135,10 @@ class FileStream extends Stream
             return true;
         }
 
-        return !is_resource($this->handle) || feof($this->handle);
+        // The handle is opened lazily, so testing is_resource() first reported
+        // end-of-file on an untouched stream and made `while (!$s->eof())` read
+        // nothing at all. Opening here gives feof() a real handle to answer for.
+        return feof($this->getHandle());
     }
 
     /**
@@ -210,7 +208,18 @@ class FileStream extends Stream
      */
     public function read(int $length): string
     {
-        $result = fread($this->getHandle(), max(1, $length));
+        if ($length < 0) {
+            throw new RuntimeException('Length must not be negative');
+        }
+
+        // PSR-7 returns an empty string for a zero-length read. Clamping to 1 —
+        // as a guard against fread()'s rejection of 0 — consumed a byte and
+        // advanced the pointer instead.
+        if ($length === 0) {
+            return '';
+        }
+
+        $result = fread($this->getHandle(), $length);
         if ($result === false) {
             throw new RuntimeException('Error reading from stream');
         }

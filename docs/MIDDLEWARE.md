@@ -34,7 +34,9 @@ $client = HttpClient::make()
 #### Example 1. Authentication — inject Bearer token from a token store
 
 Useful when the token may expire and needs to be refreshed per-request rather
-than being hardcoded once at client construction.
+than being hardcoded once at client construction. Each call to
+`withBearerToken()` replaces the token held by the client, so the freshest
+value from the store is the one sent.
 
 ```php
 use Closure;

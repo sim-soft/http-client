@@ -70,6 +70,26 @@ trait SinkTrait
     }
 
     /**
+     * Flush pending sink writes to disk.
+     *
+     * cURL writes to the sink through PHP's buffered stream. curl_exec()
+     * flushes that buffer when the transfer ends, but a transfer driven
+     * through curl_multi_* does not: the bytes sit in the buffer until the
+     * resource is closed. Anything that inspects the file before that point —
+     * or truncates it to start a retry — sees a short or stale file.
+     *
+     * @return void
+     */
+    protected function flushSink(): void
+    {
+        if (!is_resource($this->sink)) {
+            return;
+        }
+
+        fflush($this->sink);
+    }
+
+    /**
      * Validate and prepare the sink destination.
      *
      * Accepts either an open resource or a string file path. If a string path
@@ -82,6 +102,8 @@ trait SinkTrait
     protected function prepareSinkDestination(mixed $destination): void
     {
         if (is_resource($destination)) {
+            $this->releaseOwnedSink();
+
             $this->sink = $destination;
             $this->sinkPath = null;
 
@@ -96,6 +118,9 @@ trait SinkTrait
         if (is_string($destination)) {
             $handle = fopen($destination, 'w');
             $handle || throw new InvalidArgumentException("Unable to open file: $destination");
+
+            $this->releaseOwnedSink();
+
             $this->sinkOwned = true;
             $this->sink = $handle;
             $this->sinkPath = $destination;
@@ -104,5 +129,24 @@ trait SinkTrait
         }
 
         throw new InvalidArgumentException('Sink must be file path or resource');
+    }
+
+    /**
+     * Close the current sink if this client opened it, and drop the ownership flag.
+     *
+     * Ownership is set when a path is given and must not survive the sink it
+     * describes. Left standing, a subsequent sink() taking a caller-supplied
+     * resource would inherit the flag and the client would close a handle it
+     * never opened — while the handle it did open leaked.
+     *
+     * @return void
+     */
+    private function releaseOwnedSink(): void
+    {
+        if ($this->sinkOwned && is_resource($this->sink)) {
+            fclose($this->sink);
+        }
+
+        $this->sinkOwned = false;
     }
 }

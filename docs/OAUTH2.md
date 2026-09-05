@@ -538,6 +538,15 @@ $idToken = $tokenData->metadata['id_token'] ?? null;
 
 By default, tokens are stored via `FileStorage` in
 `sys_get_temp_dir()/oauth_tokens/`.
+
+Token files hold live access tokens, so they are created `0600` inside a `0700`
+directory. On a shared host the system temp directory is world-writable, so
+prefer an explicit path owned by the application user:
+
+```php
+$storage = new FileStorage('/var/lib/myapp/oauth_tokens');
+```
+
 Pass any `StorageInterface` implementation as the third argument:
 
 ```php
@@ -550,6 +559,36 @@ $token = MyApiOAuth2::request('client-id', 'client-secret', $storage)
 ```
 
 See [StorageInterface](#storage-interface) for the full interface.
+
+### How the storage key is composed
+
+A cached token is only reusable by a caller that would have received an
+interchangeable token. The key therefore covers the client ID, the subject (see
+below), the active token endpoint, and the requested scope — so a sandbox client
+never reads a production token, and a `read` client never reads a `write` one.
+
+### Binding a token to an end user
+
+In the authorization code flow the token belongs to a person, not to your
+application. Call `forSubject()` with your own stable identifier for that person
+so their token is stored under its own key:
+
+```php
+$client = GoogleOAuth2::request('client-id', 'client-secret', $storage)
+    ->forSubject($currentUser->id);
+```
+
+Without it, every user of a shared storage backend reads and overwrites the same
+entry, and one user is served another's token.
+
+A subject-bound client will not fetch a token on its own: there is no way to
+obtain a user's credential without the user. When there is no usable token —
+never authorised, or expired with no working refresh token — `getTokenData()`
+reports the failure and returns `null`, and you restart the flow with
+`getAuthorizationUrl()`. The same applies to any token obtained through
+`exchangeCode()`, which is recorded as user-delegated in its own metadata so a
+later background process cannot silently replace it with your application's
+`client_credentials` token.
 
 ---
 
@@ -784,9 +823,13 @@ class RedisStorage implements StorageInterface
 ## Storage Notes<a id="session-storage"></a>
 
 - **FileStorage** (default) — persists in `sys_get_temp_dir()/oauth_tokens/`.
-  Works in web, CLI, queues.
-- **SessionStorage** — tokens scoped per user session. Requires
-  `session_start()`.
+  Works in web, CLI, queues. An unreadable entry — truncated, evicted mid-write,
+  hand-edited — is treated as absent and replaced, rather than failing every
+  subsequent call.
+- **SessionStorage** — tokens scoped per user session. Starts the session if one
+  is not already active, and throws if it cannot (for example when headers have
+  already been sent), rather than writing tokens into a `$_SESSION` that is never
+  persisted.
 
 ```php
 use Simsoft\HttpClient\Clients\Helpers\SessionStorage;
@@ -794,6 +837,10 @@ use Simsoft\HttpClient\Clients\Helpers\SessionStorage;
 $token = MyApiOAuth2::request('client-id', 'client-secret', new SessionStorage('oauth'))
     ->getAccessToken();
 ```
+
+Any backend shared between users needs `forSubject()` — see
+[Custom Storage](#oauth2-storage). `SessionStorage` is already per-user, so it is
+the exception.
 
 ---
 

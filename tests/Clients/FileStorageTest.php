@@ -226,4 +226,89 @@ class FileStorageTest extends TestCase
 
         $this->assertDirectoryExists($expectedDir);
     }
+
+    /**
+     * Test that token files are not readable by other users on the host.
+     *
+     * Token files hold live access tokens; on a shared host the default
+     * storage location is a world-writable temp directory.
+     *
+     * @return void
+     */
+    #[Test]
+    public function tokenFilesAreNotReadableByOtherUsers(): void
+    {
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('POSIX permissions are not enforced on Windows.');
+        }
+
+        $this->storage->set('account', new TokenData(accessToken: 'secret', tokenType: 'Bearer'));
+
+        $files = glob($this->testDir . DIRECTORY_SEPARATOR . '*.token');
+        $this->assertIsArray($files);
+        $this->assertCount(1, $files);
+
+        clearstatcache();
+
+        $this->assertSame(0600, fileperms($files[0]) & 0777, 'Token file must be owner-only.');
+        $this->assertSame(0700, fileperms($this->testDir) & 0777, 'Token directory must be owner-only.');
+    }
+
+    /**
+     * Test that an existing permissive directory is tightened on construction.
+     *
+     * A directory left behind by another process keeps the mode it was created
+     * with, so the constructor must not simply trust it.
+     *
+     * @return void
+     */
+    #[Test]
+    public function existingPermissiveDirectoryIsTightened(): void
+    {
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('POSIX permissions are not enforced on Windows.');
+        }
+
+        $dir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'file_storage_loose_' . uniqid();
+        mkdir($dir, 0777, true);
+        chmod($dir, 0777);
+
+        new FileStorage($dir);
+
+        clearstatcache();
+
+        $mode = fileperms($dir) & 0777;
+        rmdir($dir);
+
+        $this->assertSame(0700, $mode, 'An existing world-readable directory must be tightened.');
+    }
+
+    /**
+     * Test that overwriting an existing token file keeps it owner-only.
+     *
+     * @return void
+     */
+    #[Test]
+    public function rewritingATokenKeepsRestrictivePermissions(): void
+    {
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('POSIX permissions are not enforced on Windows.');
+        }
+
+        $this->storage->set('account', new TokenData(accessToken: 'first', tokenType: 'Bearer'));
+
+        $files = glob($this->testDir . DIRECTORY_SEPARATOR . '*.token');
+        $this->assertIsArray($files);
+        chmod($files[0], 0644);
+
+        $this->storage->set('account', new TokenData(accessToken: 'second', tokenType: 'Bearer'));
+
+        clearstatcache();
+
+        $this->assertSame(0600, fileperms($files[0]) & 0777);
+
+        /** @var TokenData $token */
+        $token = $this->storage->get('account');
+        $this->assertSame('second', $token->accessToken);
+    }
 }

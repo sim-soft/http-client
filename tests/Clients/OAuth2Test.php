@@ -82,6 +82,17 @@ class TestOAuth2 extends OAuth2
             body: json_encode($data, JSON_THROW_ON_ERROR),
         );
     }
+
+    /**
+     * Expose the composed storage key so assertions do not restate its format.
+     *
+     * @param string $suffix Optional discriminator for related entries.
+     * @return string The storage key.
+     */
+    public function exposedStorageKey(string $suffix = ''): string
+    {
+        return $this->storageKey($suffix);
+    }
 }
 
 /**
@@ -136,6 +147,20 @@ class OAuth2Test extends TestCase
             $this->clientSecret,
             $this->storage,
         );
+    }
+
+    /**
+     * The storage key a default TestOAuth2 composes, for mock expectations.
+     *
+     * Derived from the client rather than restated, so the tests keep asserting
+     * against whatever the key composition is rather than pinning its format.
+     *
+     * @param string $suffix Optional discriminator for related entries.
+     * @return string The storage key.
+     */
+    private function tokenKey(string $suffix = ''): string
+    {
+        return $this->createInstance()->exposedStorageKey($suffix);
     }
 
     #[Test]
@@ -228,11 +253,11 @@ class OAuth2Test extends TestCase
         );
 
         $this->storage->method('has')
-            ->with($this->clientId)
+            ->with($this->tokenKey())
             ->willReturn(true);
 
         $this->storage->method('get')
-            ->with($this->clientId)
+            ->with($this->tokenKey())
             ->willReturn($cachedToken);
 
         $instance = $this->createInstance();
@@ -252,16 +277,16 @@ class OAuth2Test extends TestCase
         );
 
         $this->storage->method('has')
-            ->with($this->clientId)
+            ->with($this->tokenKey())
             ->willReturn(true);
 
         $this->storage->method('get')
-            ->with($this->clientId)
+            ->with($this->tokenKey())
             ->willReturn($expiredToken);
 
         $this->storage->expects($this->once())
             ->method('set')
-            ->with($this->clientId, $this->isInstanceOf(TokenData::class));
+            ->with($this->tokenKey(), $this->isInstanceOf(TokenData::class));
 
         $instance = $this->createInstance();
         $instance->nextResponse = TestOAuth2::createTokenResponse(200, [
@@ -287,16 +312,16 @@ class OAuth2Test extends TestCase
         );
 
         $this->storage->method('has')
-            ->with($this->clientId)
+            ->with($this->tokenKey())
             ->willReturn(true);
 
         $this->storage->method('get')
-            ->with($this->clientId)
+            ->with($this->tokenKey())
             ->willReturn($expiredToken);
 
         $this->storage->expects($this->once())
             ->method('set')
-            ->with($this->clientId, $this->isInstanceOf(TokenData::class));
+            ->with($this->tokenKey(), $this->isInstanceOf(TokenData::class));
 
         $instance = $this->createInstance();
         $instance->nextResponse = TestOAuth2::createTokenResponse(200, [
@@ -323,16 +348,16 @@ class OAuth2Test extends TestCase
         );
 
         $this->storage->method('has')
-            ->with($this->clientId)
+            ->with($this->tokenKey())
             ->willReturn(true);
 
         $this->storage->method('get')
-            ->with($this->clientId)
+            ->with($this->tokenKey())
             ->willReturn($expiredToken);
 
         $this->storage->expects($this->once())
             ->method('set')
-            ->with($this->clientId, $this->isInstanceOf(TokenData::class));
+            ->with($this->tokenKey(), $this->isInstanceOf(TokenData::class));
 
         $callCount = 0;
         $instance = $this->createInstance();
@@ -383,7 +408,7 @@ class OAuth2Test extends TestCase
     public function nonSuccessfulResponseCausesGetAccessTokenToReturnNull(): void
     {
         $this->storage->method('has')
-            ->with($this->clientId)
+            ->with($this->tokenKey())
             ->willReturn(false);
 
         $instance = $this->createInstance();
@@ -401,7 +426,7 @@ class OAuth2Test extends TestCase
     public function exceptionDuringAcquisitionReturnsNullAndLogsError(): void
     {
         $this->storage->method('has')
-            ->with($this->clientId)
+            ->with($this->tokenKey())
             ->willReturn(false);
 
         $instance = $this->createInstance();

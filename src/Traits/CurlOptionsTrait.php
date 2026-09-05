@@ -143,15 +143,49 @@ trait CurlOptionsTrait
     /**
      * Set arbitrary cURL options.
      *
+     * The two timeout options are redirected to timeout() and
+     * connectionTimeout(), which own those settings: applyTransferOptions()
+     * writes both properties into the option array on every request, so an
+     * entry stored here would be overwritten and silently ignored. Routing
+     * them keeps the last call authoritative whichever API is used.
+     *
      * @param array<int, mixed> $options
      * @return $this
+     * @throws InvalidArgumentException When a timeout option is negative or not an integer.
      */
     public function withOptions(array $options): self
     {
         foreach ($options as $option => $value) {
+            if ($option === CURLOPT_TIMEOUT) {
+                $this->timeout($this->assertTimeoutValue($value, 'CURLOPT_TIMEOUT'));
+                continue;
+            }
+
+            if ($option === CURLOPT_CONNECTTIMEOUT) {
+                $this->connectionTimeout($this->assertTimeoutValue($value, 'CURLOPT_CONNECTTIMEOUT'));
+                continue;
+            }
+
             $this->options[$option] = $value;
         }
         return $this;
+    }
+
+    /**
+     * Validate a timeout value supplied through withOptions().
+     *
+     * @param mixed $value The value given for the option.
+     * @param string $option The option name, used in the error message.
+     * @return int
+     * @throws InvalidArgumentException When the value is not an integer.
+     */
+    private function assertTimeoutValue(mixed $value, string $option): int
+    {
+        if (!is_int($value)) {
+            throw new InvalidArgumentException("$option must be an integer, " . get_debug_type($value) . ' given');
+        }
+
+        return $value;
     }
 
     /**
@@ -166,12 +200,29 @@ trait CurlOptionsTrait
             return $this->curlHandle;
         }
 
-        $this->curlHandle = curl_init();
-        if ($this->curlHandle === false) {
+        $this->curlHandle = $this->createCurlHandle();
+
+        return $this->curlHandle;
+    }
+
+    /**
+     * Create a standalone cURL handle that is not bound to this instance.
+     *
+     * Sequential requests share one handle to keep the connection alive, but a
+     * handle may only be attached to a curl_multi once. Concurrent execution
+     * therefore needs a handle of its own; adding the shared one twice returns
+     * CURLM_ADDED_ALREADY and the second transfer never runs.
+     *
+     * @return CurlHandle
+     */
+    protected function createCurlHandle(): CurlHandle
+    {
+        $handle = curl_init();
+        if ($handle === false) {
             throw new RuntimeException('Failed to initialize cURL handle.');
         }
 
-        return $this->curlHandle;
+        return $handle;
     }
 
     /**
@@ -237,18 +288,32 @@ trait CurlOptionsTrait
     }
 
     /**
-     * Reset cURL options to defaults (called by flush).
+     * Clear cURL options that belong to a single request (called by flush).
+     *
+     * Only request-scoped keys are removed. Connection-scoped configuration
+     * set by the caller — TLS verification, redirect policy, and anything
+     * passed to withOptions() — is deliberately preserved so a reused client
+     * keeps the setup it was given. Resetting the whole array here would
+     * silently re-enable TLS verification after withoutVerifying().
      *
      * @return void
      */
-    protected function resetCurlOptions(): void
+    protected function resetRequestOptions(): void
     {
         $this->returnTransfer = true;
-        $this->options = [
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS => 5,
-        ];
+
+        unset(
+            $this->options[CURLOPT_URL],
+            $this->options[CURLOPT_POST],
+            $this->options[CURLOPT_CUSTOMREQUEST],
+            $this->options[CURLOPT_POSTFIELDS],
+            $this->options[CURLOPT_UPLOAD],
+            $this->options[CURLOPT_INFILESIZE],
+            $this->options[CURLOPT_READFUNCTION],
+            $this->options[CURLOPT_RESUME_FROM],
+            $this->options[CURLOPT_FILE],
+            $this->options[CURLOPT_WRITEFUNCTION],
+            $this->options[CURLOPT_RETURNTRANSFER],
+        );
     }
 }

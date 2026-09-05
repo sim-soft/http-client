@@ -483,13 +483,12 @@ class FakeHttpClientPropertyTest extends TestCase
      * @return array<int, array{method: string, path: string}> Expected request data.
      */
     private function buildExpectedRequests(
-        int    $requestCount,
+        int $requestCount,
         string $seedMethod,
         string $seedPath,
-        array  $allMethods,
-        array  $allPaths,
-    ): array
-    {
+        array $allMethods,
+        array $allPaths,
+    ): array {
         $methodStart = array_search($seedMethod, $allMethods, true);
         $pathStart = array_search($seedPath, $allPaths, true);
         $methodCount = count($allMethods);
@@ -688,11 +687,10 @@ class FakeHttpClientPropertyTest extends TestCase
      */
     private function verifyClampedToLast(
         FakeRoute $route,
-        array     $responses,
-        int       $sequenceLength,
-        int       $totalRequests,
-    ): bool
-    {
+        array $responses,
+        int $sequenceLength,
+        int $totalRequests,
+    ): bool {
         $lastResponse = $responses[$sequenceLength - 1];
         $remainingCalls = $totalRequests - $sequenceLength;
 

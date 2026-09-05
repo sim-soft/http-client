@@ -68,6 +68,17 @@ class AuthCodeTestOAuth2 extends OAuth2
             ], JSON_THROW_ON_ERROR),
         );
     }
+
+    /**
+     * Expose the composed storage key so assertions do not restate its format.
+     *
+     * @param string $suffix Optional discriminator for related entries.
+     * @return string The storage key.
+     */
+    public function exposedStorageKey(string $suffix = ''): string
+    {
+        return $this->storageKey($suffix);
+    }
 }
 
 /**
@@ -258,7 +269,7 @@ class OAuth2AuthCodeTest extends TestCase
         $this->assertSame('test-refresh-token', $tokenData->refreshToken);
 
         // Verify token is stored in storage
-        $storedToken = $storage->get($this->clientId);
+        $storedToken = $storage->get($client->exposedStorageKey());
         $this->assertInstanceOf(TokenData::class, $storedToken);
         $this->assertSame('test-access-token', $storedToken->accessToken);
     }
@@ -296,7 +307,7 @@ class OAuth2AuthCodeTest extends TestCase
         [$client, $storage] = $this->createInstance();
 
         // Manually store state but not verifier
-        $storage->set("{$this->clientId}_oauth_state", 'valid-state');
+        $storage->set($client->exposedStorageKey('oauth_state'), 'valid-state');
 
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('No stored PKCE verifier found');
@@ -337,12 +348,12 @@ class OAuth2AuthCodeTest extends TestCase
         $state = $this->extractState($url);
 
         // Verify state exists before exchange
-        $this->assertTrue($storage->has("{$this->clientId}_oauth_state"));
+        $this->assertTrue($storage->has($client->exposedStorageKey('oauth_state')));
 
         $client->exchangeCode('auth-code-123', $state);
 
         // Verify state is removed after exchange
-        $this->assertFalse($storage->has("{$this->clientId}_oauth_state"));
+        $this->assertFalse($storage->has($client->exposedStorageKey('oauth_state')));
     }
 
     #[Test]
@@ -354,12 +365,12 @@ class OAuth2AuthCodeTest extends TestCase
         $state = $this->extractState($url);
 
         // Verify verifier exists before exchange
-        $this->assertTrue($storage->has("{$this->clientId}_pkce_verifier"));
+        $this->assertTrue($storage->has($client->exposedStorageKey('pkce_verifier')));
 
         $client->exchangeCode('auth-code-123', $state);
 
         // Verify verifier is removed after exchange
-        $this->assertFalse($storage->has("{$this->clientId}_pkce_verifier"));
+        $this->assertFalse($storage->has($client->exposedStorageKey('pkce_verifier')));
     }
 
     #[Test]
@@ -385,7 +396,7 @@ class OAuth2AuthCodeTest extends TestCase
             expiresAt: time() + 3600,
             refreshToken: 'cached-refresh-token',
         );
-        $storage->set($this->clientId, $cachedToken);
+        $storage->set($client->exposedStorageKey(), $cachedToken);
 
         $result = $client->getAccessToken();
 
@@ -404,7 +415,7 @@ class OAuth2AuthCodeTest extends TestCase
             expiresAt: time() - 100,
             refreshToken: 'my-refresh-token',
         );
-        $storage->set($this->clientId, $expiredToken);
+        $storage->set($client->exposedStorageKey(), $expiredToken);
 
         // Set up refresh response
         $client->nextResponse = new OAuth2TokenResponse(

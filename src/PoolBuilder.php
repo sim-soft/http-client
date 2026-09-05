@@ -2,6 +2,9 @@
 
 namespace Simsoft\HttpClient;
 
+use InvalidArgumentException;
+use Psr\Http\Message\StreamInterface;
+
 /**
  * PoolBuilder class.
  *
@@ -172,14 +175,49 @@ class PoolBuilder
             return $client;
         }
 
+        $method = $client->getMethod();
+
+        $this->writeBody($client, $data);
+
+        // withMultipart() forces POST, which would turn a $pool->put() into a
+        // POST. The verb the caller asked for is authoritative.
+        return $client->withMethod($method);
+    }
+
+    /**
+     * Write the body onto the client using the content type for the data given.
+     *
+     * @param HttpClient $client The client to configure.
+     * @param mixed $data The request body data.
+     *
+     * @return void
+     *
+     * @throws InvalidArgumentException When the data type has no body encoding.
+     */
+    private function writeBody(HttpClient $client, mixed $data): void
+    {
+        if ($data instanceof StreamInterface) {
+            $client->withBody($data);
+            return;
+        }
+
+        if (is_string($data)) {
+            $client->withRaw($data);
+            return;
+        }
+
+        if (!is_array($data)) {
+            throw new InvalidArgumentException(
+                'Unsupported body type: ' . get_debug_type($data) . '.'
+            );
+        }
+
         if ($this->jsonMode) {
             $client->withJson($data);
-            return $client;
+            return;
         }
 
         $client->withMultipart($data);
-
-        return $client;
     }
 
     /**

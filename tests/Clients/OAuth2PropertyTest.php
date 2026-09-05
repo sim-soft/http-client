@@ -108,6 +108,17 @@ class PropertyTestOAuth2 extends OAuth2
     }
 
     /**
+     * Expose the composed storage key so assertions do not restate its format.
+     *
+     * @param string $suffix Optional discriminator for related entries.
+     * @return string The storage key.
+     */
+    public function exposedStorageKey(string $suffix = ''): string
+    {
+        return $this->storageKey($suffix);
+    }
+
+    /**
      * Override buildTokenRequest to return controlled responses.
      *
      * @param array<string, string> $params Form parameters.
@@ -181,9 +192,9 @@ class OAuth2PropertyTest extends TestCase
                     expiresAt: time() + $futureOffset,
                 );
 
-                $storage->set($clientId, $token);
-
                 $oauth = new PropertyTestOAuth2($clientId, 'secret', $storage);
+                $storage->set($oauth->exposedStorageKey(), $token);
+
                 $result = $oauth->getAccessToken();
 
                 return $result === $accessToken && $oauth->requestCount === 0;
@@ -231,11 +242,11 @@ class OAuth2PropertyTest extends TestCase
 
                 $oauth->getAccessToken();
 
-                if (!$storage->has($clientId)) {
+                if (!$storage->has($oauth->exposedStorageKey())) {
                     return false;
                 }
 
-                $stored = $storage->get($clientId);
+                $stored = $storage->get($oauth->exposedStorageKey());
 
                 return $stored instanceof TokenData
                     && $stored->accessToken === $accessToken;

@@ -200,6 +200,7 @@ class RequestBodyTraitTest extends TestCase
         $this->assertSame('Alice', $postFields['name']);
         $this->assertSame('30', $postFields['age']);
         $this->assertSame('POST', $method);
+        $this->assertSame('multipart', $this->getProperty($client, 'contentType'));
     }
 
     /**
@@ -221,12 +222,12 @@ class RequestBodyTraitTest extends TestCase
     }
 
     /**
-     * Test withMultipart() sets multipart content type when merging.
+     * Test withMultipart() keeps the multipart content type when merging.
      *
      * @return void
      */
     #[Test]
-    public function withMultipartSetsMultipartContentTypeOnMerge(): void
+    public function withMultipartKeepsMultipartContentTypeOnMerge(): void
     {
         $client = HttpClient::make()
             ->withMultipart(['first' => 'value'])

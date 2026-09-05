@@ -91,6 +91,17 @@ class FeatureTestOAuth2 extends OAuth2
     {
         return $this->expiryBuffer;
     }
+
+    /**
+     * Expose the composed storage key so assertions do not restate its format.
+     *
+     * @param string $suffix Optional discriminator for related entries.
+     * @return string The storage key.
+     */
+    public function exposedStorageKey(string $suffix = ''): string
+    {
+        return $this->storageKey($suffix);
+    }
 }
 
 /**
@@ -271,12 +282,12 @@ class OAuth2FeaturesTest extends TestCase
         [$client, $storage] = $this->createInstance();
 
         $client->getAccessToken();
-        $this->assertTrue($storage->has($this->clientId));
+        $this->assertTrue($storage->has($client->exposedStorageKey()));
 
         $returned = $client->invalidate();
 
         $this->assertSame($client, $returned);
-        $this->assertFalse($storage->has($this->clientId));
+        $this->assertFalse($storage->has($client->exposedStorageKey()));
     }
 
     #[Test]
@@ -301,7 +312,7 @@ class OAuth2FeaturesTest extends TestCase
 
         $client->invalidate();
 
-        $this->assertFalse($storage->has($this->clientId));
+        $this->assertFalse($storage->has($client->exposedStorageKey()));
     }
 
     // ---------------------------------------------------------------
@@ -334,7 +345,7 @@ class OAuth2FeaturesTest extends TestCase
             expiresAt: time() - 100,
             refreshToken: 'refresh-me',
         );
-        $storage->set($this->clientId, $expiredToken);
+        $storage->set($client->exposedStorageKey(), $expiredToken);
 
         $captured = null;
         $client->onTokenRefreshed(function (TokenData $token) use (&$captured): void {
@@ -377,7 +388,7 @@ class OAuth2FeaturesTest extends TestCase
             accessToken: 'cached-token',
             expiresAt: time() + 3600,
         );
-        $storage->set($this->clientId, $cachedToken);
+        $storage->set($client->exposedStorageKey(), $cachedToken);
 
         $called = false;
         $client->onTokenAcquired(function () use (&$called): void {
@@ -668,7 +679,7 @@ class OAuth2FeaturesTest extends TestCase
 
         $client->getAuthorizationUrl();
 
-        $verifier = $storage->get("{$this->clientId}_pkce_verifier");
+        $verifier = $storage->get($client->exposedStorageKey('pkce_verifier'));
         $this->assertNotNull($verifier);
         $this->assertSame(128, strlen($verifier));
         $this->assertMatchesRegularExpression(
@@ -688,10 +699,10 @@ class OAuth2FeaturesTest extends TestCase
         );
 
         $client->getAuthorizationUrl();
-        $first = $storage->get("{$this->clientId}_pkce_verifier");
+        $first = $storage->get($client->exposedStorageKey('pkce_verifier'));
 
         $client->getAuthorizationUrl();
-        $second = $storage->get("{$this->clientId}_pkce_verifier");
+        $second = $storage->get($client->exposedStorageKey('pkce_verifier'));
 
         $this->assertNotSame($first, $second);
     }

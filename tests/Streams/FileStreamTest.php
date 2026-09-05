@@ -204,10 +204,10 @@ class FileStreamTest extends TestCase
     }
 
     /**
-     * Test __toString returns large stream placeholder for files over 5MB.
+     * Test __toString returns the full content of files over 5MB.
      */
     #[Test]
-    public function toStringReturnsPlaceholderForLargeFiles(): void
+    public function toStringReturnsFullContentForLargeFiles(): void
     {
         $largeFile = tempnam(sys_get_temp_dir(), 'filestream_large_');
         $this->assertNotFalse($largeFile);
@@ -221,7 +221,7 @@ class FileStreamTest extends TestCase
             fclose($fh);
 
             $stream = new FileStream($largeFile);
-            $this->assertSame("[Large Stream: $size bytes]", (string)$stream);
+            $this->assertSame($size, strlen((string)$stream));
         } finally {
             if (file_exists($largeFile)) {
                 unlink($largeFile);

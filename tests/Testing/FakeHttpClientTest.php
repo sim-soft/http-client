@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Simsoft\HttpClient\Tests\Testing;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -19,6 +20,7 @@ use Simsoft\HttpClient\Testing\UnexpectedRequestException;
  * and response sequencing behavior.
  *
  * @SuppressWarnings(PHPMD.TooManyPublicMethods)
+ * @SuppressWarnings(PHPMD.TooManyMethods)
  * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
  * @SuppressWarnings(PHPMD.StaticAccess)
  */
@@ -491,5 +493,180 @@ class FakeHttpClientTest extends TestCase
 
         $this->assertSame(202, $response->getStatusCode());
         $this->assertSame('accepted', $response->body());
+    }
+
+    // ── Sink tests ───────────────────────────────────────────────────
+
+    /**
+     * Test the response body is written to a sink given as a path.
+     *
+     * The real client hands the body to cURL, which writes it to the sink; the
+     * fake never reaches cURL, so a test asserting on a downloaded file found
+     * it empty.
+     */
+    #[Test]
+    public function sinkReceivesTheResponseBody(): void
+    {
+        $path = tempnam(sys_get_temp_dir(), 'fake_sink');
+        $this->assertNotFalse($path);
+
+        try {
+            $client = FakeHttpClient::fake([
+                'GET https://api.example.com/report.csv' => [
+                    'status' => 200,
+                    'body' => "id,name\n1,Alice\n",
+                ],
+            ]);
+
+            $client->sink($path)->get('https://api.example.com/report.csv');
+
+            $this->assertSame("id,name\n1,Alice\n", file_get_contents($path));
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    /**
+     * Test the response body is written to a sink given as a resource.
+     */
+    #[Test]
+    public function sinkResourceReceivesTheResponseBody(): void
+    {
+        $resource = fopen('php://temp', 'w+');
+        $this->assertNotFalse($resource);
+
+        try {
+            $client = FakeHttpClient::fake([
+                'GET https://api.example.com/data' => ['status' => 200, 'body' => 'payload'],
+            ]);
+
+            $client->sink($resource)->get('https://api.example.com/data');
+
+            rewind($resource);
+            $this->assertSame('payload', stream_get_contents($resource));
+        } finally {
+            fclose($resource);
+        }
+    }
+
+    /**
+     * Test a sink holds only the final response when a retry occurred.
+     *
+     * The real client truncates the sink between attempts, so the file must not
+     * accumulate the bodies of failed attempts.
+     */
+    #[Test]
+    public function sinkHoldsOnlyTheFinalResponseAfterARetry(): void
+    {
+        $path = tempnam(sys_get_temp_dir(), 'fake_sink');
+        $this->assertNotFalse($path);
+
+        try {
+            $client = FakeHttpClient::fake();
+            $client->sequence('GET https://api.example.com/flaky', [
+                ['status' => 503, 'body' => 'unavailable'],
+                ['status' => 200, 'body' => 'ok'],
+            ]);
+
+            $response = $client->retry(1)->sink($path)->get('https://api.example.com/flaky');
+
+            $this->assertSame(200, $response->getStatusCode());
+            $this->assertSame('ok', file_get_contents($path));
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    /**
+     * Test an empty response body leaves the sink empty rather than untouched.
+     */
+    #[Test]
+    public function sinkIsTruncatedForAnEmptyResponseBody(): void
+    {
+        $path = tempnam(sys_get_temp_dir(), 'fake_sink');
+        $this->assertNotFalse($path);
+
+        try {
+            file_put_contents($path, 'stale contents');
+
+            $client = FakeHttpClient::fake([
+                'GET https://api.example.com/empty' => ['status' => 204, 'body' => ''],
+            ]);
+
+            $client->sink($path)->get('https://api.example.com/empty');
+
+            $this->assertSame('', file_get_contents($path));
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    /**
+     * Test a request without a sink is unaffected.
+     */
+    #[Test]
+    public function requestWithoutASinkStillReturnsTheBody(): void
+    {
+        $client = FakeHttpClient::fake([
+            'GET https://api.example.com/plain' => ['status' => 200, 'body' => 'body text'],
+        ]);
+
+        $response = $client->get('https://api.example.com/plain');
+
+        $this->assertSame('body text', $response->body());
+    }
+
+    // ── Empty sequence tests ─────────────────────────────────────────
+
+    /**
+     * Test sequence() rejects an empty response list.
+     *
+     * The route previously matched and then died inside nextResponse() with an
+     * undefined-index warning and a TypeError, pointing at the library rather
+     * than at the empty call.
+     */
+    #[Test]
+    public function sequenceRejectsAnEmptyResponseList(): void
+    {
+        $client = FakeHttpClient::fake();
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('A fake route requires at least one response.');
+
+        $client->sequence('GET https://api.example.com/nothing', []);
+    }
+
+    /**
+     * Test a route rejected for being empty is not registered.
+     *
+     * A half-registered route would match later requests and fail again.
+     */
+    #[Test]
+    public function anEmptySequenceLeavesNoRouteBehind(): void
+    {
+        $client = FakeHttpClient::fake();
+
+        try {
+            $client->sequence('GET https://api.example.com/nothing', []);
+            $this->fail('Expected InvalidArgumentException for an empty sequence.');
+        } catch (InvalidArgumentException) {
+            // Expected: the sequence carried no responses.
+        }
+
+        $this->expectException(UnexpectedRequestException::class);
+
+        $client->get('https://api.example.com/nothing');
+    }
+
+    /**
+     * Test a single-response sequence is still accepted.
+     */
+    #[Test]
+    public function sequenceAcceptsASingleResponse(): void
+    {
+        $client = FakeHttpClient::fake();
+        $client->sequence('GET https://api.example.com/one', [200]);
+
+        $this->assertSame(200, $client->get('https://api.example.com/one')->getStatusCode());
     }
 }

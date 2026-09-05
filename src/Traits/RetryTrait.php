@@ -96,16 +96,4 @@ trait RetryTrait
         }
         usleep($this->retryAfter * 1000);
     }
-
-    /**
-     * Reset retry state (called by flush).
-     *
-     * @return void
-     */
-    protected function resetRetry(): void
-    {
-        $this->retry = 0;
-        $this->retryAfter = null;
-        $this->retryCallback = null;
-    }
 }

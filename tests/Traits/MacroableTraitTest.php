@@ -21,6 +21,13 @@ use Simsoft\HttpClient\Traits\Macroable;
  * @method string sayGoodbye()
  * @method string getLabel()
  * @method void nonExistentMethod()
+ * @method string plainValue()
+ * @method string protectedValue()
+ * @method string joinValues(string $one, string $two)
+ * @method string readSecret()
+ * @method string readLabel()
+ * @method string fromFactory()
+ * @method string fromPlain()
  */
 class MacroableHost
 {
@@ -37,6 +44,7 @@ class MacroableHost
  * $this binding, and undefined macro handling.
  *
  * @SuppressWarnings(PHPMD.StaticAccess)
+ * @SuppressWarnings(PHPMD.TooManyPublicMethods)
  */
 class MacroableTraitTest extends TestCase
 {
@@ -198,5 +206,192 @@ class MacroableTraitTest extends TestCase
         $result = $this->host->getLabel();
 
         $this->assertSame('custom-label', $result);
+    }
+
+    /**
+     * Test that a public mixin method not returning a Closure is callable.
+     *
+     * Registering such a method as an [$object, 'method'] pair left __call()
+     * trying to rebind a method closure to an unrelated class, which PHP
+     * refuses: the bind emitted a warning, returned null, and the call died
+     * with a TypeError.
+     *
+     * @return void
+     */
+    #[Test]
+    public function mixinRegistersPublicMethodNotReturningClosure(): void
+    {
+        $mixin = new class () {
+            /**
+             * A public method returning a plain value.
+             *
+             * @return string
+             */
+            public function plainValue(): string
+            {
+                return 'plain from mixin';
+            }
+        };
+
+        MacroableHost::mixin($mixin);
+
+        $this->assertSame('plain from mixin', $this->host->plainValue());
+    }
+
+    /**
+     * Test that a protected mixin method not returning a Closure is callable.
+     *
+     * A protected method could not even be invoked through a callable pair,
+     * being out of scope outside the mixin itself.
+     *
+     * @return void
+     */
+    #[Test]
+    public function mixinRegistersProtectedMethodNotReturningClosure(): void
+    {
+        $mixin = new class () {
+            /**
+             * A protected method returning a plain value.
+             *
+             * @return string
+             */
+            protected function protectedValue(): string
+            {
+                return 'protected from mixin';
+            }
+        };
+
+        MacroableHost::mixin($mixin);
+
+        $this->assertSame('protected from mixin', $this->host->protectedValue());
+    }
+
+    /**
+     * Test that a forwarded mixin method receives the arguments it was called with.
+     *
+     * @return void
+     */
+    #[Test]
+    public function forwardedMixinMethodReceivesArguments(): void
+    {
+        $mixin = new class () {
+            /**
+             * A method taking arguments and returning a plain value.
+             *
+             * @param string $one First argument.
+             * @param string $two Second argument.
+             * @return string
+             */
+            public function joinValues(string $one, string $two): string
+            {
+                return $one . '-' . $two;
+            }
+        };
+
+        MacroableHost::mixin($mixin);
+
+        $this->assertSame('a-b', $this->host->joinValues('a', 'b'));
+    }
+
+    /**
+     * Test that a forwarded mixin method keeps the mixin as its receiver.
+     *
+     * The wrapper must not rebind the method: its own $this, and therefore the
+     * mixin's private state, has to stay intact.
+     *
+     * @return void
+     */
+    #[Test]
+    public function forwardedMixinMethodKeepsMixinAsReceiver(): void
+    {
+        $mixin = new class () {
+            /** @var string Private state only the mixin can read. */
+            private string $secret = 'mixin-state';
+
+            /**
+             * A method reading the mixin's own private state.
+             *
+             * @return string
+             */
+            public function readSecret(): string
+            {
+                return $this->secret;
+            }
+        };
+
+        MacroableHost::mixin($mixin);
+
+        $this->assertSame('mixin-state', $this->host->readSecret());
+    }
+
+    /**
+     * Test that a mixin returning a Closure still binds to the host object.
+     *
+     * The factory pattern is the documented way to reach the host, and the
+     * forwarding wrapper must not have disturbed it.
+     *
+     * @return void
+     */
+    #[Test]
+    public function closureReturningMixinMethodStillBindsToHost(): void
+    {
+        $this->host->label = 'host-label';
+
+        $mixin = new class () {
+            /**
+             * A factory method whose closure reads the host's property.
+             *
+             * @return Closure
+             */
+            public function readLabel(): Closure
+            {
+                return function (): string {
+                    /** @var MacroableHost $this */
+                    return $this->label;
+                };
+            }
+        };
+
+        MacroableHost::mixin($mixin);
+
+        $this->assertSame('host-label', $this->host->readLabel());
+    }
+
+    /**
+     * Test that a mixin mixing both method styles registers each correctly.
+     *
+     * @return void
+     */
+    #[Test]
+    public function mixinRegistersBothClosureAndPlainMethods(): void
+    {
+        $mixin = new class () {
+            /**
+             * A factory method.
+             *
+             * @return Closure
+             */
+            public function fromFactory(): Closure
+            {
+                return function (): string {
+                    return 'factory';
+                };
+            }
+
+            /**
+             * A plain method.
+             *
+             * @return string
+             */
+            public function fromPlain(): string
+            {
+                return 'plain';
+            }
+        };
+
+        MacroableHost::mixin($mixin);
+
+        $this->assertSame('factory', $this->host->fromFactory());
+        $this->assertSame('plain', $this->host->fromPlain());
     }
 }

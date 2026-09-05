@@ -47,8 +47,8 @@ class TokenDataPropertyTest extends TestCase
                 Gen::oneOf(Gen::asciiStrings()->notEmpty(), Gen::choose(0, 0)->map(fn() => null)),
             ],
             function (
-                string  $accessToken,
-                int     $expiresAt,
+                string $accessToken,
+                int $expiresAt,
                 ?string $refreshToken,
                 ?string $tokenType,
                 ?string $scope,

@@ -44,7 +44,7 @@ trait OAuth2TokenOperationsTrait
             ->post($this->revocationEndpoint);
 
         if ($response->successful()) {
-            $this->storage->remove($this->clientId);
+            $this->storage->remove($this->storageKey());
             return true;
         }
 

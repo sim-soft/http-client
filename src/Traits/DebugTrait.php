@@ -58,12 +58,16 @@ trait DebugTrait
 
         $url = $this->buildDebugUrl();
 
+        // Show what will actually be sent: per-request headers over connection-scoped ones.
+        $headers = array_change_key_case($this->headers)
+            + array_change_key_case($this->persistentHeaders);
+
         echo "<pre>";
         var_dump([
             'base_url' => $url,
             'resource_url' => $this->pendingUrl ?: null,
             'method' => $this->method,
-            'curl_headers' => $this->headers,
+            'curl_headers' => $headers,
             'curl_options' => $this->options,
             'query_params' => $this->queryParams,
             'post_fields' => $this->postFields,

@@ -39,14 +39,17 @@ trait RequestBodyTrait
      */
     public function withMultipart(array $data): self
     {
-        if (is_array($this->postFields)) {
-            $this->postFields = array_merge((array)$this->postFields, $data);
-            return $this->withMethod('POST')->asMultipart();
+        // Close a previously owned stream before replacing
+        if ($this->postFields instanceof StreamInterface && $this->postFieldsOwned) {
+            $this->postFields->close();
         }
+        $this->postFieldsOwned = false;
 
-        $this->contentType = null;
-        $this->postFields = $data;
-        return $this->withMethod('POST');
+        $this->postFields = is_array($this->postFields)
+            ? array_merge($this->postFields, $data)
+            : $data;
+
+        return $this->withMethod('POST')->asMultipart();
     }
 
     /**

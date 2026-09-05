@@ -240,7 +240,7 @@ final class FakeHttpClient extends HttpClient
                 $this->recorded[] = new RecordedRequest(
                     method: $method,
                     url: $url,
-                    headers: $this->headers,
+                    headers: $this->headers + $this->persistentHeaders,
                     body: $this->postFields,
                 );
 
@@ -257,12 +257,38 @@ final class FakeHttpClient extends HttpClient
                 }
 
                 if (!$this->shouldRetry($response, $attempts) || ++$attempts > $maxAttempts) {
+                    $this->writeToSink($response);
+
                     return $response;
                 }
 
                 $this->wait();
             } while (true);
         };
+    }
+
+    /**
+     * Write the fake response body to the configured sink.
+     *
+     * The real client hands the body straight to cURL, which writes it to the
+     * sink; the fake never reaches cURL, so a test that asserts on a downloaded
+     * file found it empty. Only the final response is written, matching the
+     * real client's behaviour of truncating the sink between retries.
+     *
+     * @param Response $response The response being returned to the caller.
+     *
+     * @return void
+     */
+    private function writeToSink(Response $response): void
+    {
+        if (!is_resource($this->sink)) {
+            return;
+        }
+
+        ftruncate($this->sink, 0);
+        rewind($this->sink);
+        fwrite($this->sink, (string)$response->getBody());
+        fflush($this->sink);
     }
 
     /**

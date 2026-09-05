@@ -208,6 +208,9 @@ $client->get('/status'); // 503 (repeats last)
 $client->get('/status'); // 503 (repeats last)
 ```
 
+A sequence must contain at least one response; an empty one throws
+`InvalidArgumentException` when the route is registered.
+
 ### Mixing Sequences with Single Responses
 
 ```php
@@ -428,6 +431,33 @@ public function handlesNetworkFailure(): void
     $this->assertTrue($response->failed());
 }
 ```
+
+## Testing Downloads
+
+`sink()` works against the fake: the body of the response the fake returns is
+written to the destination, so a download path can be tested without a network.
+
+```php
+#[Test]
+public function downloadsTheReport(): void
+{
+    $path = tempnam(sys_get_temp_dir(), 'report');
+
+    $client = FakeHttpClient::fake([
+        'GET https://api.example.com/report.csv' => [
+            'status' => 200,
+            'body' => "id,name\n1,Alice\n",
+        ],
+    ]);
+
+    $client->sink($path)->get('https://api.example.com/report.csv');
+
+    $this->assertSame("id,name\n1,Alice\n", file_get_contents($path));
+}
+```
+
+Only the final response is written. If a sequence drives a retry, the sink holds
+the response the caller received, matching the real client.
 
 ## Full Test Class Example
 

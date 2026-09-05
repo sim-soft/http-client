@@ -1,7 +1,7 @@
 # Simsoft HttpClient
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![PHP Version](https://img.shields.io/badge/PHP-%5E8.1-8892BF.svg)](https://www.php.net/)
+[![PHP Version](https://img.shields.io/badge/PHP-%5E8.2-8892BF.svg)](https://www.php.net/)
 
 ## Introduction
 
@@ -21,7 +21,7 @@ echo $response->data('data.0.name'); // "John Doe"
 
 ## Requirements
 
-- PHP 8.1+
+- PHP 8.2+
 - ext-curl
 
 ## Install
@@ -97,6 +97,11 @@ if ($response->ok()) {
 }
 ```
 
+The base URL and the path are joined by exactly one slash, so a trailing slash
+on the base or a missing leading slash on the path make no difference. A path
+given as an absolute URL is used as-is, letting a configured client address
+another host directly.
+
 ## Sending Requests
 
 ```php
@@ -151,6 +156,10 @@ $response = HttpClient::make()
     ->get('/data');
 ```
 
+Header names must be valid RFC 7230 tokens, and values may not contain line
+breaks or NUL bytes. Both throw `InvalidArgumentException`, so a user-supplied
+value forwarded into a header cannot forge additional headers on the wire.
+
 ## Timeouts & cURL Options
 
 ```php
@@ -165,11 +174,25 @@ $response = HttpClient::make()
     ->get('https://api.example.com/data');
 ```
 
+`CURLOPT_TIMEOUT` and `CURLOPT_CONNECTTIMEOUT` may also be passed to
+`withOptions()`; they are routed to `timeout()` and `connectionTimeout()`, so
+the last call wins whichever form is used. A non-integer value for either
+throws `InvalidArgumentException`.
+
 ## Authentication
 
 ```php
 // Bearer token
 $client = HttpClient::make()->withBearerToken('YOUR_TOKEN');
+
+// The token is connection-scoped: set it once and it is sent with every
+// request made through this client. Headers added with withHeader() are
+// per-request and are cleared after each request.
+$client->get('/users');    // Authorization: Bearer YOUR_TOKEN
+$client->get('/projects'); // Authorization: Bearer YOUR_TOKEN
+
+// Replace the token by calling withBearerToken() again, or remove it:
+$client->withoutBearerToken();
 
 // For OAuth2 flows, see docs/OAUTH2.md
 ```
@@ -270,7 +293,8 @@ $client->attach('file', fopen('path/to/doc.pdf', 'r'), 'doc.pdf')->post('/upload
 $client->attach('file', 'file content here', 'note.txt', 'text/plain')->post('/upload');
 ```
 
-Multiple files:
+Multiple files under one field name. The parts are named `files[0]`, `files[1]`
+and so on, which a server reads as a list:
 
 ```php
 $client->attach('files', [
@@ -278,6 +302,11 @@ $client->attach('files', [
     new CURLFile('path/to/file2.pdf'),
 ])->post('/upload');
 ```
+
+Calling `attach()` again with the same name appends rather than replaces.
+
+The posted filename defaults to the file's basename, so the local directory is
+never sent. Pass a filename explicitly to override it.
 
 ## Downloading Files
 
@@ -376,6 +405,17 @@ HttpClient::make()->dd()->post('https://api.example.com/data', ['foo' => 'bar'])
 | [Macro & Mixin](MACRO)      | Add methods at runtime without subclassing                                         |
 | [Middleware](MIDDLEWARE)    | Auth injection, caching, circuit breaking, logging, error normalization            |
 | [Testing](TESTING)          | FakeHttpClient with pattern matching, sequencing, and PHPUnit assertions           |
+
+## Changelog
+
+See [CHANGELOG.md](https://github.com/sim-soft/http-client/blob/master/CHANGELOG.md).
+
+## Security
+
+Security-relevant defaults and how to report a vulnerability privately are
+documented in
+[SECURITY.md](https://github.com/sim-soft/http-client/blob/master/SECURITY.md).
+Please do not open a public issue for a security problem.
 
 ## License
 

@@ -2,6 +2,7 @@
 
 namespace Simsoft\HttpClient;
 
+use InvalidArgumentException;
 use Psr\Http\Message\MessageInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamInterface;
@@ -50,13 +51,12 @@ class Response implements ResponseInterface
      */
     final public function __construct(
         protected array|false $curlInfo = false,
-        protected string  $body = '',
-        protected string  $message = '',
+        protected string $body = '',
+        protected string $message = '',
         protected ?string $sinkPath = null,
-        protected int     $errno = 0,
-        protected string  $rawHeaders = '',
-    )
-    {
+        protected int $errno = 0,
+        protected string $rawHeaders = '',
+    ) {
         $this->statusCode = $curlInfo['http_code'] ?? 0;
         $this->setHeaders($rawHeaders);
     }
@@ -71,13 +71,12 @@ class Response implements ResponseInterface
     {
         $this->headers = [];
 
-        $blocks = preg_split('/\r?\n\r?\n/', trim($rawHeaders));
-        $lastBlock = $blocks === false ? '' : (end($blocks) ?: '');
-        if ($lastBlock === '') {
+        $block = $this->selectHeaderBlock($rawHeaders);
+        if ($block === '') {
             return;
         }
 
-        $lines = explode("\n", str_replace("\r", "", $lastBlock));
+        $lines = explode("\n", str_replace("\r", '', $block));
         foreach ($lines as $index => $line) {
             if (trim($line) === '') {
                 continue;
@@ -90,11 +89,57 @@ class Response implements ResponseInterface
 
             if (str_contains($line, ':')) {
                 [$key, $value] = explode(':', $line, 2);
-                $this->headers[trim($key)][] = trim($value);
+                // Lower-cased on insertion. Converting only at the end gives a
+                // separate bucket to each spelling and then collapses them,
+                // keeping just the last — which silently drops all but one
+                // Set-Cookie when a server varies the capitalisation.
+                $this->headers[strtolower(trim($key))][] = trim($value);
+            }
+        }
+    }
+
+    /**
+     * Select the header block describing the final response.
+     *
+     * cURL concatenates a block per hop, so the last one is normally wanted. A
+     * chunked response with trailers adds a further block that is not a response
+     * head — it has no status line — and taking that one blindly discarded every
+     * real header. The last block introduced by a status line is used instead,
+     * falling back to the last block for a server that omits it.
+     *
+     * @param string $rawHeaders
+     * @return string
+     */
+    private function selectHeaderBlock(string $rawHeaders): string
+    {
+        $blocks = preg_split('/\r?\n\r?\n/', trim($rawHeaders));
+        if ($blocks === false || $blocks === []) {
+            return '';
+        }
+
+        foreach (array_reverse($blocks) as $block) {
+            if (str_starts_with(ltrim($block), 'HTTP/')) {
+                return $block;
             }
         }
 
-        $this->headers = array_change_key_case($this->headers);
+        return (string)end($blocks);
+    }
+
+    /**
+     * Reset the lazily built body stream when the response is cloned.
+     *
+     * PSR-7 requires a with*() method to leave the original untouched, but a
+     * plain clone copies the stream handle by reference: reading through one
+     * response advanced the other, and closing one left the other empty. The
+     * clone drops the cached stream and rebuilds it on demand from the body or
+     * sink path, which are plain values and copy correctly.
+     *
+     * @return void
+     */
+    public function __clone()
+    {
+        $this->stream = null;
     }
 
     /**
@@ -543,13 +588,23 @@ class Response implements ResponseInterface
      */
     protected function getRecursive(array $array, array $segments, mixed $default = null): mixed
     {
+        // A path ending in a wildcard — `items.*` — leaves nothing further to
+        // resolve, so the matched value is the item itself. Shifting an empty
+        // list here yielded null and made every such lookup return the default.
+        if ($segments === []) {
+            return $array;
+        }
+
         $segment = array_shift($segments);
 
         if ($segment === '*') {
             return $this->collectWildcard($array, $segments, $default);
         }
 
-        if (!isset($array[$segment])) {
+        // array_key_exists, not isset: a JSON null is a value the server sent,
+        // and isset() cannot tell it from an absent key, so `{"a":null}` used to
+        // yield the default and made a present-but-null field unreadable.
+        if (!array_key_exists($segment, $array)) {
             return $default;
         }
 
@@ -582,12 +637,13 @@ class Response implements ResponseInterface
             if (!is_array($item)) {
                 continue;
             }
-            $value = $this->getRecursive($item, $segments, $default);
-            if (is_array($value)) {
-                $result = array_merge($result, $value);
-                continue;
-            }
-            $result[] = $value;
+
+            // One entry per matched item, whatever its type. Splicing an array
+            // value in with array_merge lost which item each element came from,
+            // and made the result length depend on the data: `items.*.tags`
+            // over two items holding two tags and one tag returned three
+            // entries, so indexing the result against the items was wrong.
+            $result[] = $this->getRecursive($item, $segments, $default);
         }
 
         return $result;
@@ -715,7 +771,10 @@ class Response implements ResponseInterface
     {
         $clone = clone $this;
         $clone->body = (string)$body;
-        $clone->stream = null;
+        // The sink path takes priority when the body is read back, so leaving it
+        // set made a replacement body on a downloaded response a silent no-op
+        // for getRaw(), json() and data() while getContents() saw the new value.
+        $clone->sinkPath = null;
         $clone->attributes = null;
         $clone->isJson = null;
         return $clone;
@@ -726,6 +785,12 @@ class Response implements ResponseInterface
      */
     public function withStatus(int $code, string $reasonPhrase = ''): ResponseInterface
     {
+        if ($code < 100 || $code > 599) {
+            throw new InvalidArgumentException(
+                "Invalid HTTP status code: $code. Must be between 100 and 599."
+            );
+        }
+
         $clone = clone $this;
         $clone->statusCode = $code;
         $clone->message = $reasonPhrase;

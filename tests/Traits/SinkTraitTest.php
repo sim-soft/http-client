@@ -7,6 +7,7 @@ namespace Simsoft\HttpClient\Tests\Traits;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use ReflectionMethod;
 use ReflectionProperty;
 use Simsoft\HttpClient\Traits\SinkTrait;
 
@@ -297,6 +298,163 @@ class SinkTraitTest extends TestCase
             $this->assertNull($this->getProperty('sinkPath'));
         } finally {
             fclose($resource);
+        }
+    }
+
+    /**
+     * Test that replacing a path sink with a resource clears the ownership flag.
+     *
+     * The flag was set when the path was opened and never cleared, so the
+     * caller's resource inherited it and the host would close a stream it never
+     * opened.
+     *
+     * @return void
+     */
+    #[Test]
+    public function sinkClearsOwnershipWhenReplacedByResource(): void
+    {
+        $tmpFile = tempnam(sys_get_temp_dir(), 'sink_own');
+        $this->assertNotFalse($tmpFile);
+
+        $resource = fopen('php://memory', 'w+');
+        $this->assertNotFalse($resource);
+
+        try {
+            $this->host->sink($tmpFile);
+            $this->assertTrue($this->getProperty('sinkOwned'));
+
+            $this->host->sink($resource);
+
+            $this->assertFalse($this->getProperty('sinkOwned'));
+            $this->assertSame($resource, $this->getProperty('sink'));
+        } finally {
+            fclose($resource);
+            @unlink($tmpFile);
+        }
+    }
+
+    /**
+     * Test that a caller-supplied resource survives replacing a path sink.
+     *
+     * This is the consequence of the stale flag: releasing the sink would have
+     * closed a stream belonging to the caller.
+     *
+     * @return void
+     */
+    #[Test]
+    public function sinkLeavesCallerResourceOpenAfterPathSink(): void
+    {
+        $tmpFile = tempnam(sys_get_temp_dir(), 'sink_own');
+        $this->assertNotFalse($tmpFile);
+
+        $resource = fopen('php://memory', 'w+');
+        $this->assertNotFalse($resource);
+
+        try {
+            $this->host->sink($tmpFile);
+            $this->host->sink($resource);
+
+            $release = new ReflectionMethod($this->host, 'releaseOwnedSink');
+            $release->invoke($this->host);
+
+            $this->assertTrue(is_resource($resource));
+        } finally {
+            if (is_resource($resource)) {
+                fclose($resource);
+            }
+            @unlink($tmpFile);
+        }
+    }
+
+    /**
+     * Test that replacing one path sink with another closes the first stream.
+     *
+     * The host opened both, so leaving the first open would leak it.
+     *
+     * @return void
+     */
+    #[Test]
+    public function sinkClosesThePreviousOwnedStream(): void
+    {
+        $firstFile = tempnam(sys_get_temp_dir(), 'sink_one');
+        $secondFile = tempnam(sys_get_temp_dir(), 'sink_two');
+        $this->assertNotFalse($firstFile);
+        $this->assertNotFalse($secondFile);
+
+        try {
+            $this->host->sink($firstFile);
+            $firstHandle = $this->getProperty('sink');
+
+            $this->host->sink($secondFile);
+
+            $this->assertFalse(is_resource($firstHandle));
+            $this->assertTrue(is_resource($this->getProperty('sink')));
+            $this->assertTrue($this->getProperty('sinkOwned'));
+            $this->assertSame($secondFile, $this->getProperty('sinkPath'));
+        } finally {
+            @unlink($firstFile);
+            @unlink($secondFile);
+        }
+    }
+
+    /**
+     * Test that sinkStream() applies the same ownership handling as sink().
+     *
+     * @return void
+     */
+    #[Test]
+    public function sinkStreamClearsOwnershipWhenReplacedByResource(): void
+    {
+        $tmpFile = tempnam(sys_get_temp_dir(), 'sink_own');
+        $this->assertNotFalse($tmpFile);
+
+        $resource = fopen('php://memory', 'w+');
+        $this->assertNotFalse($resource);
+
+        try {
+            $this->host->sinkStream($tmpFile);
+            $this->assertTrue($this->getProperty('sinkOwned'));
+
+            $this->host->sinkStream($resource);
+
+            $this->assertFalse($this->getProperty('sinkOwned'));
+            $this->assertTrue(is_resource($resource));
+        } finally {
+            fclose($resource);
+            @unlink($tmpFile);
+        }
+    }
+
+    /**
+     * Test that a failed open leaves the existing sink untouched.
+     *
+     * prepareSinkDestination() opens the new destination before releasing the
+     * old one, so a client that cannot open its next sink keeps a usable one.
+     *
+     * @return void
+     */
+    #[Test]
+    public function failedOpenLeavesTheExistingSinkIntact(): void
+    {
+        $tmpFile = tempnam(sys_get_temp_dir(), 'sink_own');
+        $this->assertNotFalse($tmpFile);
+
+        try {
+            $this->host->sink($tmpFile);
+            $existingHandle = $this->getProperty('sink');
+
+            try {
+                @$this->host->sink(__DIR__ . '/no_such_directory/file.txt');
+                $this->fail('Expected InvalidArgumentException for an unopenable path.');
+            } catch (InvalidArgumentException) {
+                // Expected: the destination could not be opened.
+            }
+
+            $this->assertSame($existingHandle, $this->getProperty('sink'));
+            $this->assertTrue(is_resource($existingHandle));
+            $this->assertTrue($this->getProperty('sinkOwned'));
+        } finally {
+            @unlink($tmpFile);
         }
     }
 }
