@@ -3,6 +3,7 @@
 namespace Simsoft\HttpClient\Testing;
 
 use Closure;
+use InvalidArgumentException;
 use Simsoft\HttpClient\Response;
 
 /**
@@ -22,12 +23,20 @@ final class FakeRoute
      *
      * @param string|Closure $matcher URL pattern or callable matcher.
      * @param array<int, Response> $responses Ordered response sequence.
+     * @throws InvalidArgumentException When no responses are given.
      */
     public function __construct(
         private readonly string|Closure $matcher,
         private readonly array $responses,
     )
     {
+        // A route with nothing to return matches a request and then fails
+        // inside nextResponse() with an undefined-index warning and a
+        // TypeError, pointing at the library rather than at the empty
+        // sequence() call that caused it.
+        if ($this->responses === []) {
+            throw new InvalidArgumentException('A fake route requires at least one response.');
+        }
     }
 
     /**

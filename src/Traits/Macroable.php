@@ -69,26 +69,40 @@ trait Macroable
     }
 
     /**
-     * Resolve a mixin method to either its returned Closure or a callable array.
+     * Resolve a mixin method to either its returned Closure or a forwarding Closure.
+     *
+     * Methods that do not produce a Closure are wrapped rather than registered
+     * as an [$object, 'method'] pair. A pair is not usable here: __call() has to
+     * rebind whatever it stores to the host instance, and a method closure
+     * cannot be rebound across an unrelated class — PHP emits "Cannot bind
+     * method ... to object of class", Closure::bind() returns null, and the
+     * call dies with a TypeError. A protected method never even reaches that
+     * point, since the pair is not callable outside the mixin's scope.
+     *
+     * The wrapper keeps the mixin as the receiver, so its own $this, private
+     * state and visibility all work as written.
      *
      * @param object $mixin
      * @param ReflectionMethod $method
-     * @return Closure|callable
+     * @return Closure
      * @throws ReflectionException
      */
-    private static function resolveMixinMethod(object $mixin, ReflectionMethod $method): Closure|callable
+    private static function resolveMixinMethod(object $mixin, ReflectionMethod $method): Closure
     {
         $returnType = $method->getReturnType();
         $returnsClosure = $returnType instanceof ReflectionNamedType
             && $returnType->getName() === 'Closure';
 
         if ($returnsClosure) {
-            return $method->invoke($mixin);
+            /** @var Closure $factory */
+            $factory = $method->invoke($mixin);
+
+            return $factory;
         }
 
-        /** @var callable(): mixed $callback */
-        $callback = [$mixin, $method->getName()];
-        return $callback;
+        return function (mixed ...$arguments) use ($mixin, $method): mixed {
+            return $method->invoke($mixin, ...$arguments);
+        };
     }
 
     /**

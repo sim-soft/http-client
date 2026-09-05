@@ -99,6 +99,11 @@ if ($response->ok()) {
 }
 ```
 
+The base URL and the path are joined by exactly one slash, so a trailing slash
+on the base or a missing leading slash on the path make no difference. A path
+given as an absolute URL is used as-is, letting a configured client address
+another host directly.
+
 ## Sending Requests
 
 ```php
@@ -170,6 +175,11 @@ $response = HttpClient::make()
     ])
     ->get('https://api.example.com/data');
 ```
+
+`CURLOPT_TIMEOUT` and `CURLOPT_CONNECTTIMEOUT` may also be passed to
+`withOptions()`; they are routed to `timeout()` and `connectionTimeout()`, so
+the last call wins whichever form is used. A non-integer value for either
+throws `InvalidArgumentException`.
 
 ## Authentication
 

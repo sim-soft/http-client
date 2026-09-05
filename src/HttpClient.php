@@ -31,6 +31,9 @@ use Throwable;
 /**
  * Request class.
  *
+ * @phpstan-consistent-constructor make() instantiates the called class, so a
+ * subclass must keep the constructor signature it inherits.
+ *
  * @SuppressWarnings(PHPMD.TooManyPublicMethods) Trait methods are counted toward the class total.
  * @SuppressWarnings(PHPMD.CouplingBetweenObjects) Coupling is inherent to PSR-18 compliance and trait composition.
  */
@@ -93,13 +96,28 @@ class HttpClient implements ClientInterface
     public const TYPE_RAW = 'raw';
 
     /**
+     * Create a new client.
+     *
+     * Declared so make() has a signature it can rely on when instantiating the
+     * called class. A subclass adding required constructor parameters would
+     * break that factory, which is what @phpstan-consistent-constructor pins.
+     */
+    public function __construct()
+    {
+    }
+
+    /**
      * Factory method.
      *
-     * @return self
+     * Late static binding keeps the factory usable by subclasses: new self()
+     * returned an HttpClient even when called as MyClient::make(), so any
+     * behaviour the subclass added was silently dropped.
+     *
+     * @return static
      */
-    public static function make(): self
+    public static function make(): static
     {
-        return new self();
+        return new static();
     }
 
     /**
@@ -175,11 +193,39 @@ class HttpClient implements ClientInterface
     /**
      * Get endpoint URL.
      *
+     * The base URL and the resource path are joined by exactly one slash.
+     * Plain concatenation produced "https://api.test//users" for a base with a
+     * trailing slash and "https://api.testusers" for a resource without a
+     * leading one — the first is a different path to most routers, the second
+     * a different host.
+     *
+     * An absolute resource URL is returned as given, so a client configured
+     * with a base URL can still address another host directly.
+     *
      * @return string
      */
     public function getEndpoint(): string
     {
-        return $this->baseUrl . $this->pendingUrl;
+        if ($this->baseUrl === '' || $this->isAbsoluteUrl($this->pendingUrl)) {
+            return $this->pendingUrl === '' ? $this->baseUrl : $this->pendingUrl;
+        }
+
+        if ($this->pendingUrl === '') {
+            return $this->baseUrl;
+        }
+
+        return rtrim($this->baseUrl, '/') . '/' . ltrim($this->pendingUrl, '/');
+    }
+
+    /**
+     * Determine whether a URL carries its own scheme and host.
+     *
+     * @param string $url The URL to inspect.
+     * @return bool
+     */
+    private function isAbsoluteUrl(string $url): bool
+    {
+        return preg_match('#^[a-z][a-z0-9+.-]*://#i', $url) === 1;
     }
 
     /**

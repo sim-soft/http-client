@@ -246,6 +246,54 @@ fact, so they summarise each release rather than list every change.
   raw, a `StreamInterface` is used as the body, and anything else raises
   `InvalidArgumentException` naming the type.
 
+- **Timeouts set through `withOptions()` were ignored.** `applyTransferOptions()`
+  writes the `timeout()` and `connectionTimeout()` properties into the option
+  array on every request, overwriting whatever the caller had stored for
+  `CURLOPT_TIMEOUT` or `CURLOPT_CONNECTTIMEOUT`; a client asking for a 1-second
+  timeout waited the 30-second default. Both options are now routed to their
+  setters, so the last call wins whichever API is used. A non-integer value for
+  either raises `InvalidArgumentException` instead of being ignored.
+
+- **`getEndpoint()` joined the base URL and resource by concatenation.** A base
+  with a trailing slash produced `https://api.test//users`, a different path to
+  most routers; a resource without a leading slash produced
+  `https://api.test users` run together as `https://api.testusers`, a different
+  host. The two are now joined by exactly one slash, and a resource that is
+  itself an absolute URL is used as given.
+
+- **A second `sink()` call closed a caller's stream and leaked the client's
+  own.** The ownership flag was set when a path was opened and never cleared,
+  so a later `sink($resource)` inherited it and the client closed a handle it
+  never opened — while the file it had opened was left dangling. Ownership is
+  now released with the sink it describes.
+
+- **Mixin methods that do not return a `Closure` were unusable.** They were
+  registered as an `[$object, 'method']` pair, which `__call()` then tried to
+  rebind to the host instance; PHP refuses to rebind a method closure across an
+  unrelated class, so the call died with a `TypeError` — and a protected method
+  never got that far, being uncallable outside the mixin's scope. Such methods
+  are now wrapped in a forwarding closure that keeps the mixin as the receiver.
+
+- **`formData()` sent url-encoded fields instead of multipart.** The deprecated
+  method forwarded to `withForm()`, contradicting both its name and the
+  `withMultipart()` named in its own deprecation notice, and silently changing
+  the request for callers who had not migrated. It now forwards to
+  `withMultipart()`, as it always did before.
+
+- **`HttpClient::make()` ignored subclasses.** `new self()` returned an
+  `HttpClient` even when called as `MyClient::make()`, dropping whatever the
+  subclass added. The factory now instantiates the called class.
+
+- **An empty response sequence failed inside the library.** `sequence($pattern, [])`
+  built a route that matched and then died in `nextResponse()` with an
+  undefined-index warning and a `TypeError`, pointing at the library rather than
+  at the empty call. `FakeRoute` now rejects an empty sequence at construction.
+
+- **`FakeHttpClient` ignored `sink()`.** The real client hands the body to cURL,
+  which writes it to the sink; the fake never reaches cURL, so a test asserting
+  on a downloaded file found it empty. The fake now writes the final response
+  body to a configured sink.
+
 ### Added
 
 - `withoutBearerToken()` removes a connection-scoped token from a client.
@@ -299,6 +347,10 @@ fact, so they summarise each release rather than list every change.
   Code calling it directly is now responsible for closing each handle it
   receives — the destructor no longer covers them — and should call
   `releaseRequest()` when the transfer is done.
+
+- **`HttpClient` declares an explicit no-argument constructor.** A subclass that
+  needs constructor parameters must give them defaults, so that `make()` can
+  instantiate the called class.
 
 ## [2.2.4] - 2026-06-24
 

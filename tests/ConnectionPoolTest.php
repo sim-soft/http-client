@@ -194,6 +194,7 @@ class ConnectionPoolTest extends TestCase
         $expectedMethods = [
             '__call',
             '__clone',
+            '__construct',
             '__destruct',
             'asForm',
             'asJson',

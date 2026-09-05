@@ -19,7 +19,13 @@ trait DeprecatedTrait
 
     /**
      * Prepare form-data request params.
-     **
+     *
+     * Forwards to withMultipart(), which is what this method has always done:
+     * it set a multipart/form-data content type. Forwarding to withForm()
+     * instead sent url-encoded fields, contradicting both the name and the
+     * replacement named in the deprecation notice, and quietly changing the
+     * request for anyone who had not migrated yet.
+     *
      * @param array<string, mixed> $data
      * @return $this
      * @deprecated Use withMultipart(array) instead.
@@ -27,7 +33,7 @@ trait DeprecatedTrait
     public function formData(array $data): self
     {
         trigger_error('formData() is deprecated, use withMultipart()', E_USER_DEPRECATED);
-        return $this->withForm($data);
+        return $this->withMultipart($data);
     }
 
     /**

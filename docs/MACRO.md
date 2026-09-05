@@ -110,11 +110,13 @@ Each method in the mixin class is inspected:
 
 - If the method's return type is `Closure`, the method is **invoked** and its
   returned closure is registered as the macro (factory pattern — shown above).
-- If the method returns anything else, the method itself is registered as a
-  callable macro.
+- If the method returns anything else, the method is registered as a macro that
+  forwards to it, with the mixin object as the receiver.
 
 The factory pattern (returning `Closure`) is recommended because it gives the
-macro access to `$this` — the HttpClient instance the macro is called on.
+macro access to `$this` — the HttpClient instance the macro is called on. A
+method registered by forwarding keeps its own `$this` (the mixin), so it can use
+the mixin's state but cannot reach the client it was called on.
 
 ### Additive vs overwrite mode
 

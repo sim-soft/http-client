@@ -143,15 +143,49 @@ trait CurlOptionsTrait
     /**
      * Set arbitrary cURL options.
      *
+     * The two timeout options are redirected to timeout() and
+     * connectionTimeout(), which own those settings: applyTransferOptions()
+     * writes both properties into the option array on every request, so an
+     * entry stored here would be overwritten and silently ignored. Routing
+     * them keeps the last call authoritative whichever API is used.
+     *
      * @param array<int, mixed> $options
      * @return $this
+     * @throws InvalidArgumentException When a timeout option is negative or not an integer.
      */
     public function withOptions(array $options): self
     {
         foreach ($options as $option => $value) {
+            if ($option === CURLOPT_TIMEOUT) {
+                $this->timeout($this->assertTimeoutValue($value, 'CURLOPT_TIMEOUT'));
+                continue;
+            }
+
+            if ($option === CURLOPT_CONNECTTIMEOUT) {
+                $this->connectionTimeout($this->assertTimeoutValue($value, 'CURLOPT_CONNECTTIMEOUT'));
+                continue;
+            }
+
             $this->options[$option] = $value;
         }
         return $this;
+    }
+
+    /**
+     * Validate a timeout value supplied through withOptions().
+     *
+     * @param mixed $value The value given for the option.
+     * @param string $option The option name, used in the error message.
+     * @return int
+     * @throws InvalidArgumentException When the value is not an integer.
+     */
+    private function assertTimeoutValue(mixed $value, string $option): int
+    {
+        if (!is_int($value)) {
+            throw new InvalidArgumentException("$option must be an integer, " . get_debug_type($value) . ' given');
+        }
+
+        return $value;
     }
 
     /**

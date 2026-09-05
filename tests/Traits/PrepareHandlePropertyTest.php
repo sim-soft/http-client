@@ -191,6 +191,9 @@ class PrepareHandlePropertyTest extends TestCase
     /**
      * Verify that CURLOPT_URL contains the correct URL.
      *
+     * The base URL and the resource are joined by exactly one slash, so the
+     * expectation is built the same way rather than by concatenation.
+     *
      * @param array<int, mixed> $options The cURL options.
      * @param string $baseUrl The base URL.
      * @param string $url The pending URL path.
@@ -202,7 +205,7 @@ class PrepareHandlePropertyTest extends TestCase
             return false;
         }
 
-        $expectedUrl = $baseUrl . $url;
+        $expectedUrl = rtrim($baseUrl, '/') . '/' . ltrim($url, '/');
 
         return str_starts_with($options[CURLOPT_URL], $expectedUrl);
     }
