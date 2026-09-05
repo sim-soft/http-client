@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests (PHP ${{ matrix.php }}, ${{ matrix.dependencies }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # composer.json declares php ^8.1, so every supported minor is exercised.
+        php: ['8.1', '8.2', '8.3', '8.4']
+        dependencies: [highest]
+        include:
+          # Guards the lower bounds of the declared PSR constraints.
+          - php: '8.1'
+            dependencies: lowest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: curl, json, mbstring
+          coverage: none
+          ini-values: error_reporting=E_ALL
+
+      - name: Install dependencies
+        uses: ramsey/composer-install@v3
+        with:
+          dependency-versions: ${{ matrix.dependencies }}
+
+      - name: Run tests
+        run: vendor/bin/phpunit --use-baseline baseline.xml tests
+
+  static-analysis:
+    name: Static analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: curl, json, mbstring
+          coverage: none
+
+      - name: Install dependencies
+        uses: ramsey/composer-install@v3
+
+      - name: PHPStan
+        run: vendor/bin/phpstan analyse --no-progress --memory-limit=512M
+
+      - name: PHPMD
+        run: vendor/bin/phpmd src github phpmd.xml
+
+  coding-standards:
+    name: Coding standards
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: curl, json, mbstring
+          coverage: none
+
+      - name: Install dependencies
+        uses: ramsey/composer-install@v3
+
+      # Reports only. The repository carries pre-existing PSR-12 formatting
+      # violations, so this is not yet a merge gate; make it blocking once
+      # they are cleared.
+      - name: PHPCS
+        continue-on-error: true
+        run: vendor/bin/phpcs --standard=PSR12 src tests --report=full
+
+  composer-validate:
+    name: Validate composer.json
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      # composer.lock is gitignored for a library, so lock freshness is not
+      # checked here — only the manifest itself.
+      - name: Validate
+        run: composer validate --strict --no-check-lock
