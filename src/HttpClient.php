@@ -129,11 +129,12 @@ class HttpClient implements ClientInterface
 
         if ($this->sinkOwned && is_resource($this->sink)) {
             fclose($this->sink);
-            $this->sink = null;
         }
+        $this->sink = null;
         $this->sinkOwned = false;
         $this->sinkPath = null;
         $this->resetDebug();
+        $this->resetRequestOptions();
     }
 
     /**

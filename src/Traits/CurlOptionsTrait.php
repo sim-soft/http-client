@@ -237,18 +237,32 @@ trait CurlOptionsTrait
     }
 
     /**
-     * Reset cURL options to defaults (called by flush).
+     * Clear cURL options that belong to a single request (called by flush).
+     *
+     * Only request-scoped keys are removed. Connection-scoped configuration
+     * set by the caller — TLS verification, redirect policy, and anything
+     * passed to withOptions() — is deliberately preserved so a reused client
+     * keeps the setup it was given. Resetting the whole array here would
+     * silently re-enable TLS verification after withoutVerifying().
      *
      * @return void
      */
-    protected function resetCurlOptions(): void
+    protected function resetRequestOptions(): void
     {
         $this->returnTransfer = true;
-        $this->options = [
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS => 5,
-        ];
+
+        unset(
+            $this->options[CURLOPT_URL],
+            $this->options[CURLOPT_POST],
+            $this->options[CURLOPT_CUSTOMREQUEST],
+            $this->options[CURLOPT_POSTFIELDS],
+            $this->options[CURLOPT_UPLOAD],
+            $this->options[CURLOPT_INFILESIZE],
+            $this->options[CURLOPT_READFUNCTION],
+            $this->options[CURLOPT_RESUME_FROM],
+            $this->options[CURLOPT_FILE],
+            $this->options[CURLOPT_WRITEFUNCTION],
+            $this->options[CURLOPT_RETURNTRANSFER],
+        );
     }
 }
