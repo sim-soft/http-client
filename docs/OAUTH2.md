@@ -538,6 +538,15 @@ $idToken = $tokenData->metadata['id_token'] ?? null;
 
 By default, tokens are stored via `FileStorage` in
 `sys_get_temp_dir()/oauth_tokens/`.
+
+Token files hold live access tokens, so they are created `0600` inside a `0700`
+directory. On a shared host the system temp directory is world-writable, so
+prefer an explicit path owned by the application user:
+
+```php
+$storage = new FileStorage('/var/lib/myapp/oauth_tokens');
+```
+
 Pass any `StorageInterface` implementation as the third argument:
 
 ```php

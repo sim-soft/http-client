@@ -17,9 +17,19 @@ use Simsoft\HttpClient\Interfaces\StorageInterface;
  * The storage directory defaults to the system temp directory under an
  * `oauth_tokens` subdirectory. You can provide a custom path via the
  * constructor.
+ *
+ * Files hold live access tokens, so they are created 0600 and the directory
+ * 0700. On a shared host the default location is a world-writable temp
+ * directory; prefer passing a path owned by the application user.
  */
 class FileStorage implements StorageInterface
 {
+    /** @var int Permissions for the storage directory: owner only. */
+    private const DIR_MODE = 0700;
+
+    /** @var int Permissions for token files: owner read/write only. */
+    private const FILE_MODE = 0600;
+
     /** @var string The directory where token files are stored. */
     private string $directory;
 
@@ -34,8 +44,13 @@ class FileStorage implements StorageInterface
         $this->directory = $directory ?? sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'oauth_tokens';
 
         if (!is_dir($this->directory)) {
-            mkdir($this->directory, 0700, true);
+            mkdir($this->directory, self::DIR_MODE, true);
+            return;
         }
+
+        // An existing directory keeps whatever mode it was created with, which
+        // for a shared temp directory may be world-readable.
+        $this->restrictPermissions($this->directory, self::DIR_MODE);
     }
 
     /**
@@ -51,7 +66,41 @@ class FileStorage implements StorageInterface
      */
     public function set(string $key, mixed $value): void
     {
-        file_put_contents($this->filePath($key), serialize($value), LOCK_EX);
+        $path = $this->filePath($key);
+
+        // Restrict the file before the token is written to it, so the secret is
+        // never briefly readable under the default umask.
+        if (!is_file($path)) {
+            touch($path);
+        }
+
+        $this->restrictPermissions($path, self::FILE_MODE);
+
+        file_put_contents($path, serialize($value), LOCK_EX);
+    }
+
+    /**
+     * Tighten permissions on a token file or its directory.
+     *
+     * chmod is a no-op on Windows and may fail where the process does not own
+     * the path; both are tolerated, since the alternative is refusing to store
+     * a token that the caller has already obtained.
+     *
+     * @param string $path The file or directory to restrict.
+     * @param int $mode The octal permission mode to apply.
+     * @return void
+     */
+    private function restrictPermissions(string $path, int $mode): void
+    {
+        if (DIRECTORY_SEPARATOR === '\\') {
+            return;
+        }
+
+        if ((fileperms($path) & 0777) === $mode) {
+            return;
+        }
+
+        @chmod($path, $mode);
     }
 
     /**
