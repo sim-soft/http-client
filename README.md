@@ -153,6 +153,10 @@ $response = HttpClient::make()
     ->get('/data');
 ```
 
+Header names must be valid RFC 7230 tokens, and values may not contain line
+breaks or NUL bytes. Both throw `InvalidArgumentException`, so a user-supplied
+value forwarded into a header cannot forge additional headers on the wire.
+
 ## Timeouts & cURL Options
 
 ```php

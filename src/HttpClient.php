@@ -225,8 +225,9 @@ class HttpClient implements ClientInterface
     /**
      * Set headers.
      *
-     * @param string[] $headers
+     * @param array<string, string|array<array-key, mixed>> $headers
      * @return $this
+     * @throws InvalidArgumentException When a name or value is not a legal header.
      */
     public function withHeaders(array $headers): self
     {
@@ -240,16 +241,65 @@ class HttpClient implements ClientInterface
      * Add header.
      *
      * @param string $name
-     * @param string|array<string, mixed> $value
+     * @param string|array<array-key, mixed> $value
      * @return self
+     * @throws InvalidArgumentException When the name or value is not a legal header.
      */
     public function withHeader(string $name, string|array $value): self
     {
+        $this->assertHeaderName($name);
+
         $current = (array)($this->headers[$name] ?? []);
         $new = array_map(fn($val) => (string)$val, (array)$value);
+
+        foreach ($new as $val) {
+            $this->assertHeaderValue($name, $val);
+        }
+
         $this->headers[$name] = array_values(array_unique(array_merge($current, $new)));
         $this->formattedHeaders = null;
         return $this;
+    }
+
+    /**
+     * Assert that a header name is a legal RFC 7230 token.
+     *
+     * A name containing CR or LF would terminate the header line early and let
+     * a caller-supplied value forge additional headers on the wire, so anything
+     * outside the token grammar is rejected outright.
+     *
+     * @param string $name The header name to validate.
+     * @return void
+     * @throws InvalidArgumentException When the name is empty or not a token.
+     */
+    protected function assertHeaderName(string $name): void
+    {
+        if (preg_match('/^[!#$%&\'*+\-.^_`|~0-9A-Za-z]+$/', $name) === 1) {
+            return;
+        }
+
+        throw new InvalidArgumentException(
+            sprintf('Invalid header name: %s', var_export($name, true))
+        );
+    }
+
+    /**
+     * Assert that a header value contains no line breaks or NUL bytes.
+     *
+     * @param string $name The header name, for the error message.
+     * @param string $value The header value to validate.
+     * @return void
+     * @throws InvalidArgumentException When the value contains CR, LF or NUL.
+     */
+    protected function assertHeaderValue(string $name, string $value): void
+    {
+        if (strpbrk($value, "\r\n\0") === false) {
+            return;
+        }
+
+        throw new InvalidArgumentException(
+            sprintf('Invalid value for header "%s": line breaks and NUL bytes are not allowed.', $name)
+        );
     }
 
     /**
@@ -337,9 +387,12 @@ class HttpClient implements ClientInterface
      *
      * @param string $token
      * @return $this
+     * @throws InvalidArgumentException When the token contains line breaks or NUL bytes.
      */
     public function withBearerToken(string $token): self
     {
+        $this->assertHeaderValue('Authorization', $token);
+
         $this->persistentHeaders['authorization'] = ["Bearer $token"]; // Force single value
         $this->formattedHeaders = null;
         return $this;
@@ -527,15 +580,26 @@ class HttpClient implements ClientInterface
     /**
      * Build formatted headers.
      *
+     * Values are re-validated here as a last line of defence: not every header
+     * reaches this point through withHeader(), for example a content type
+     * supplied to withBody(). Nothing containing CR or LF may reach cURL.
+     *
      * @param array<string, mixed> $headers
      * @return array<array-key, mixed>
+     * @throws InvalidArgumentException When a name or value is not a legal header.
      */
     protected function buildFormattedHeaders(array $headers): array
     {
         $formatted = [];
         foreach ($headers as $key => $values) {
+            $this->assertHeaderName($key);
             $normalized = ucwords(strtolower($key), '-');
             $values = (array)$values;
+
+            foreach ($values as $value) {
+                $this->assertHeaderValue($key, (string)$value);
+            }
+
             // Set-Cookie is the only header that should stay as multiple lines
             if (strtolower($key) === 'set-cookie') {
                 foreach ($values as $value) {
