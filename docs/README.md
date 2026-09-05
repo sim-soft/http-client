@@ -390,6 +390,17 @@ HttpClient::make()->dd()->post('https://api.example.com/data', ['foo' => 'bar'])
 | [Middleware](MIDDLEWARE)    | Auth injection, caching, circuit breaking, logging, error normalization            |
 | [Testing](TESTING)          | FakeHttpClient with pattern matching, sequencing, and PHPUnit assertions           |
 
+## Changelog
+
+See [CHANGELOG.md](https://github.com/sim-soft/http-client/blob/master/CHANGELOG.md).
+
+## Security
+
+Security-relevant defaults and how to report a vulnerability privately are
+documented in
+[SECURITY.md](https://github.com/sim-soft/http-client/blob/master/SECURITY.md).
+Please do not open a public issue for a security problem.
+
 ## License
 
 MIT

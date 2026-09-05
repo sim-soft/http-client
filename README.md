@@ -392,6 +392,16 @@ HttpClient::make()->dd()->post('https://api.example.com/data', ['foo' => 'bar'])
 | [Middleware](docs/MIDDLEWARE.md)    | Auth injection, caching, circuit breaking, logging, error normalization            |
 | [Testing](docs/TESTING.md)          | FakeHttpClient with pattern matching, sequencing, and PHPUnit assertions           |
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
+
+## Security
+
+Security-relevant defaults and how to report a vulnerability privately are
+documented in [SECURITY.md](SECURITY.md). Please do not open a public issue
+for a security problem.
+
 ## License
 
 MIT — see [LICENSE](LICENSE)
