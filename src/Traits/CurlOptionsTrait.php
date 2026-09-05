@@ -166,12 +166,29 @@ trait CurlOptionsTrait
             return $this->curlHandle;
         }
 
-        $this->curlHandle = curl_init();
-        if ($this->curlHandle === false) {
+        $this->curlHandle = $this->createCurlHandle();
+
+        return $this->curlHandle;
+    }
+
+    /**
+     * Create a standalone cURL handle that is not bound to this instance.
+     *
+     * Sequential requests share one handle to keep the connection alive, but a
+     * handle may only be attached to a curl_multi once. Concurrent execution
+     * therefore needs a handle of its own; adding the shared one twice returns
+     * CURLM_ADDED_ALREADY and the second transfer never runs.
+     *
+     * @return CurlHandle
+     */
+    protected function createCurlHandle(): CurlHandle
+    {
+        $handle = curl_init();
+        if ($handle === false) {
             throw new RuntimeException('Failed to initialize cURL handle.');
         }
 
-        return $this->curlHandle;
+        return $handle;
     }
 
     /**

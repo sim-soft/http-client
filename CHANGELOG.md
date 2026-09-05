@@ -200,9 +200,58 @@ fact, so they summarise each release rather than list every change.
   `$_SESSION` that was never persisted, and every request re-fetched a token. It
   now throws instead.
 
+- **A pooled request no longer stalls the batch it shares a client with.**
+  `buildHandle()` handed out the instance's shared cURL handle, and a cURL
+  handle may be attached to a `curl_multi` only once. Submitting the same client
+  twice in one `send()` — or letting the pool retry one — had the second
+  `curl_multi_add_handle()` rejected with `CURLM_ADDED_ALREADY`; the pool then
+  waited on a transfer that was never running and hung until the process was
+  killed. `buildHandle()` now returns a handle of its own each call. Sequential
+  `request()` calls still reuse one handle, so connection reuse is unchanged.
+
+- **`HttpPool` returned responses in key order, not input order.**
+  `getResponses()` and `foreach` sorted the keys, so `['zebra' => …, 'alpha' =>
+  …]` came back alpha-first and ids listed `5, 1, 3` came back `1, 3, 5` —
+  against the order documented in `docs/POOL.md`. Access by key was correct
+  throughout; only iteration and `array_keys()` were affected. Responses now
+  follow the input array.
+
+- **A pooled download was truncated to the last full buffer.** cURL writes the
+  sink through PHP's buffered stream, and a `curl_multi` transfer does not flush
+  it at the end the way `curl_exec()` does, so a 200 KB download read back as
+  196 608 bytes until the client happened to be destroyed. The pool now flushes
+  each sink as its transfer completes.
+
+- **A pooled download that was retried kept the tail of the failed attempt.**
+  The retry truncated the file while the failed response was still buffered, so
+  the buffer drained afterwards and left the old bytes behind the new ones — a
+  300-byte success after a 500-byte error produced a 500-byte file. The stream
+  is now settled before it is truncated.
+
+- **`HttpPool` left the clients it executed holding their request state.** The
+  pool drives the handle itself, so the reset that ends `request()` never ran:
+  after a pool the client still carried the URL, method, query, body and
+  per-request headers of the pooled request, and the next fluent call inherited
+  them. State is now released per request as it completes.
+
+- **`PoolBuilder::put()`, `patch()` and `delete()` sent POST.** Applying a body
+  went through `withMultipart()`, which forces POST, so every builder request
+  with a body reached the server as a POST regardless of the verb asked for.
+  Requests without a body were unaffected. The requested verb is now
+  authoritative.
+
+- **`PoolBuilder` raised a `TypeError` for a string or stream body.** The verb
+  methods accept `mixed`, but the body was passed straight to `withMultipart()`
+  or `withJson()`, both of which require an array. A string body is now sent
+  raw, a `StreamInterface` is used as the body, and anything else raises
+  `InvalidArgumentException` naming the type.
+
 ### Added
 
 - `withoutBearerToken()` removes a connection-scoped token from a client.
+- `HttpClient::releaseRequest()` settles and discards per-request state for a
+  client whose handle was executed by an external driver. `HttpPool` calls it;
+  code driving `buildHandle()` directly should too.
 - `OAuth2::forSubject()` binds a client's cached token to an end user, so a
   shared storage backend does not serve one user's token to another.
 - `OAuth2TokenResponse::getError()` returns the provider's `error` — combined
@@ -244,6 +293,12 @@ fact, so they summarise each release rather than list every change.
   reads or writes these entries directly — rather than through the client — must
   be updated; an authorization flow in progress across the upgrade will need to
   be restarted.
+
+- **`HttpClient::buildHandle()` returns a new handle per call** rather than the
+  instance's shared one, so that a handle can be attached to a `curl_multi`.
+  Code calling it directly is now responsible for closing each handle it
+  receives — the destructor no longer covers them — and should call
+  `releaseRequest()` when the transfer is done.
 
 ## [2.2.4] - 2026-06-24
 

@@ -8,6 +8,7 @@ use CurlHandle;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
+use ReflectionMethod;
 use ReflectionProperty;
 use Simsoft\HttpClient\HttpClient;
 
@@ -36,6 +37,19 @@ class ConnectionPoolTest extends TestCase
     }
 
     /**
+     * Prepare a request handle the way request() does, using the shared handle.
+     *
+     * @param HttpClient $client The client to prepare.
+     * @return CurlHandle
+     */
+    private function prepareHandle(HttpClient $client): CurlHandle
+    {
+        $method = new ReflectionMethod($client, 'prepareHandle');
+
+        return $method->invoke($client, 'test_request_id');
+    }
+
+    /**
      * Test that buildHandle() returns a valid CurlHandle instance.
      *
      * @return void
@@ -53,21 +67,21 @@ class ConnectionPoolTest extends TestCase
     }
 
     /**
-     * Test that sequential buildHandle() calls reuse the same internal CurlHandle.
+     * Test that sequential requests reuse the same internal CurlHandle.
      *
      * Validates: Requirements 6.1, 6.2
      *
      * @return void
      */
     #[Test]
-    public function sequentialBuildHandleCallsReuseSameHandle(): void
+    public function sequentialRequestsReuseSameHandle(): void
     {
         $client = HttpClient::make()
             ->withBaseUrl('http://example.com')
             ->resource('/test');
 
-        $handleFirst = $client->buildHandle();
-        $handleSecond = $client->buildHandle();
+        $handleFirst = $this->prepareHandle($client);
+        $handleSecond = $this->prepareHandle($client);
 
         // Both calls should return the same CurlHandle object (reused via curl_reset)
         $this->assertSame($handleFirst, $handleSecond);
@@ -78,14 +92,18 @@ class ConnectionPoolTest extends TestCase
     }
 
     /**
-     * Test that multiple buildHandle() calls all return the same handle instance.
+     * Test that every buildHandle() call returns a handle of its own.
+     *
+     * A cURL handle may be attached to a curl_multi only once, so a client
+     * submitted twice in one batch — or resubmitted for a retry — must not be
+     * handed the instance's shared handle.
      *
      * Validates: Requirements 6.1, 6.2
      *
      * @return void
      */
     #[Test]
-    public function multipleBuildHandleCallsAllReturnSameInstance(): void
+    public function buildHandleReturnsADedicatedHandlePerCall(): void
     {
         $client = HttpClient::make()
             ->withBaseUrl('http://example.com')
@@ -96,10 +114,30 @@ class ConnectionPoolTest extends TestCase
             $handles[] = $client->buildHandle();
         }
 
-        // All handles should be the exact same object
-        for ($index = 1; $index < 5; $index++) {
-            $this->assertSame($handles[0], $handles[$index]);
-        }
+        $this->assertCount(5, array_unique($handles, SORT_REGULAR));
+
+        // The shared handle is untouched by buildHandle().
+        $this->assertNull($this->getProperty($client, 'curlHandle'));
+    }
+
+    /**
+     * Test that handles returned by buildHandle() can be added to one multi handle.
+     *
+     * @return void
+     */
+    #[Test]
+    public function buildHandleProducesHandlesOneMultiAccepts(): void
+    {
+        $client = HttpClient::make()
+            ->withBaseUrl('http://example.com')
+            ->resource('/users');
+
+        $multiHandle = curl_multi_init();
+
+        $this->assertSame(CURLM_OK, curl_multi_add_handle($multiHandle, $client->buildHandle()));
+        $this->assertSame(CURLM_OK, curl_multi_add_handle($multiHandle, $client->buildHandle()));
+
+        curl_multi_close($multiHandle);
     }
 
     /**
@@ -116,8 +154,8 @@ class ConnectionPoolTest extends TestCase
             ->withBaseUrl('http://example.com')
             ->resource('/test');
 
-        // Build a handle to ensure one exists
-        $client->buildHandle();
+        // Prepare a request to ensure the shared handle exists
+        $this->prepareHandle($client);
 
         // Verify handle exists before destruction
         $handleBefore = $this->getProperty($client, 'curlHandle');
@@ -146,8 +184,8 @@ class ConnectionPoolTest extends TestCase
     {
         $reflection = new ReflectionClass(HttpClient::class);
         $publicMethods = array_map(
-            static fn(\ReflectionMethod $method): string => $method->getName(),
-            $reflection->getMethods(\ReflectionMethod::IS_PUBLIC)
+            static fn(ReflectionMethod $method): string => $method->getName(),
+            $reflection->getMethods(ReflectionMethod::IS_PUBLIC)
         );
         sort($publicMethods);
 
@@ -182,6 +220,7 @@ class ConnectionPoolTest extends TestCase
             'put',
             'query',
             'raw',
+            'releaseRequest',
             'request',
             'resource',
             'retry',

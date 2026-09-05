@@ -712,12 +712,19 @@ class HttpClient implements ClientInterface
      * This method prepares the handle with all configured options but does NOT
      * execute it. The caller is responsible for execution and cleanup.
      *
+     * Each call returns a handle of its own. A cURL handle may be attached to
+     * a curl_multi only once, so the instance's cached handle — which exists to
+     * keep the connection alive between sequential request() calls — cannot be
+     * handed out here: a client submitted twice in one batch, or resubmitted
+     * for a retry, would otherwise be rejected with CURLM_ADDED_ALREADY and
+     * that transfer would never run.
+     *
      * @return CurlHandle The prepared handle ready for curl_multi_add_handle().
      */
     public function buildHandle(): CurlHandle
     {
         $requestId = uniqid('httpclient_req_', true);
-        return $this->prepareHandle($requestId);
+        return $this->prepareDedicatedHandle($requestId);
     }
 
     /**
@@ -728,6 +735,22 @@ class HttpClient implements ClientInterface
     public function getPoolSinkPath(): ?string
     {
         return $this->sinkPath;
+    }
+
+    /**
+     * Settle and discard the state of a request executed by an external driver.
+     *
+     * request() ends by flushing per-request state; a client handed to HttpPool
+     * never reaches that point, because the pool executes the handle itself.
+     * Without this call the client keeps the URL, method, query and body of the
+     * pooled request, and the next call through the fluent API inherits them.
+     *
+     * @return void
+     */
+    public function releaseRequest(): void
+    {
+        $this->flushSink();
+        $this->flush();
     }
 
     /**

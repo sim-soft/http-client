@@ -70,6 +70,26 @@ trait SinkTrait
     }
 
     /**
+     * Flush pending sink writes to disk.
+     *
+     * cURL writes to the sink through PHP's buffered stream. curl_exec()
+     * flushes that buffer when the transfer ends, but a transfer driven
+     * through curl_multi_* does not: the bytes sit in the buffer until the
+     * resource is closed. Anything that inspects the file before that point —
+     * or truncates it to start a retry — sees a short or stale file.
+     *
+     * @return void
+     */
+    protected function flushSink(): void
+    {
+        if (!is_resource($this->sink)) {
+            return;
+        }
+
+        fflush($this->sink);
+    }
+
+    /**
      * Validate and prepare the sink destination.
      *
      * Accepts either an open resource or a string file path. If a string path

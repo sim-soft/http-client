@@ -12,20 +12,57 @@ use Psr\Http\Message\StreamInterface;
 trait PrepareHandleTrait
 {
     /**
-     * Prepare the cURL handle for the next request.
+     * Prepare the instance's shared cURL handle for the next request.
      *
      * @param string $requestId Unique ID for this request.
      * @return CurlHandle
      */
     protected function prepareHandle(string $requestId): CurlHandle
     {
+        $this->prepareRequestOptions($requestId);
+
+        return $this->configureHandle($this->initCurlHandle());
+    }
+
+    /**
+     * Prepare a cURL handle of its own for the next request.
+     *
+     * Concurrent execution needs this: one handle cannot serve two
+     * simultaneous transfers, and curl_multi rejects a handle it already holds.
+     *
+     * @param string $requestId Unique ID for this request.
+     * @return CurlHandle
+     */
+    protected function prepareDedicatedHandle(string $requestId): CurlHandle
+    {
+        $this->prepareRequestOptions($requestId);
+
+        return $this->configureHandle($this->createCurlHandle());
+    }
+
+    /**
+     * Translate the configured request state into cURL options.
+     *
+     * @param string $requestId Unique ID for this request.
+     * @return void
+     */
+    private function prepareRequestOptions(string $requestId): void
+    {
         $this->prepareUrl();
         $this->prepareMethodOptions();
         $this->prepareHeaders($requestId);
         $this->preparePostFields();
         $this->prepareDownloadOptions();
+    }
 
-        $handle = $this->initCurlHandle();
+    /**
+     * Apply the prepared options to a handle.
+     *
+     * @param CurlHandle $handle The handle to configure.
+     * @return CurlHandle The same handle, configured.
+     */
+    private function configureHandle(CurlHandle $handle): CurlHandle
+    {
         $this->applyTransferOptions($handle);
 
         curl_setopt($handle, CURLOPT_HTTPHEADER, $this->buildFinalHeaders());
@@ -241,6 +278,12 @@ trait PrepareHandleTrait
         }
 
         unset($this->options[CURLOPT_RESUME_FROM]);
+
+        // Settle writes from a previous attempt first. A pooled transfer leaves
+        // its bytes in the stream buffer, and a truncate here would be undone
+        // the moment that buffer drains — leaving the tail of the old response
+        // sitting behind the new one.
+        $this->flushSink();
 
         $downloadedSize = ftell($this->sink);
         if ($downloadedSize > 0) {

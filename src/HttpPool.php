@@ -500,6 +500,8 @@ class HttpPool
                     continue;
                 }
 
+                $clients[$index]->releaseRequest();
+
                 $responses[$index] = $response;
 
                 $this->invokeOnResponse($response, $index);
@@ -536,9 +538,15 @@ class HttpPool
 
         curl_multi_close($multiHandle);
 
-        ksort($responses);
+        // Responses arrive in completion order, which bears no relation to the
+        // order the requests were given in. Sorting the keys would only agree
+        // with the input for an already-ascending set — 'zebra' before 'alpha',
+        // or ids listed 5, 1, 3, would come back rearranged — so the input
+        // array itself drives the order.
+        $ordered = array_intersect_key(array_replace($clients, $responses), $responses);
 
-        return new HttpPoolResult($responses);
+        /** @var array<int|string, Response> $ordered */
+        return new HttpPoolResult($ordered);
     }
 
     /**

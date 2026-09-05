@@ -10,6 +10,7 @@ use PHPUnit\Framework\TestCase;
 use QuickCheck\Generator as Gen;
 use QuickCheck\PHPUnit\PropertyConstraint;
 use QuickCheck\Property;
+use ReflectionMethod;
 use ReflectionProperty;
 use Simsoft\HttpClient\HttpClient;
 
@@ -57,7 +58,7 @@ class ConnectionPoolPropertyTest extends TestCase
 
     /**
      * Verify that the curlHandle property references the same instance
-     * across multiple buildHandle() calls on the same HttpClient.
+     * across multiple sequential requests on the same HttpClient.
      *
      * @param int $requestCount Number of sequential requests to simulate.
      * @return bool True if the same CurlHandle is reused for all requests.
@@ -68,6 +69,7 @@ class ConnectionPoolPropertyTest extends TestCase
             ->withBaseUrl('https://example.com');
 
         $curlHandleProperty = new ReflectionProperty($client, 'curlHandle');
+        $prepareHandle = new ReflectionMethod($client, 'prepareHandle');
 
         $firstHandle = null;
 
@@ -75,7 +77,7 @@ class ConnectionPoolPropertyTest extends TestCase
             $client->resource('/test/' . $index);
             $client->withMethod('GET');
 
-            $returnedHandle = $client->buildHandle();
+            $returnedHandle = $prepareHandle->invoke($client, 'request_' . $index);
 
             $storedHandle = $curlHandleProperty->getValue($client);
 
