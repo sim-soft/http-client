@@ -6,6 +6,7 @@ namespace Simsoft\HttpClient\Tests;
 
 use Closure;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\StreamInterface;
@@ -13,6 +14,24 @@ use ReflectionProperty;
 use Simsoft\HttpClient\Clients\Responses\SimpleOAuth2Response;
 use Simsoft\HttpClient\HttpClient;
 use Simsoft\HttpClient\Response;
+
+/**
+ * HttpClientSubclass class.
+ *
+ * A subclass used to verify that make() instantiates the called class.
+ */
+class HttpClientSubclass extends HttpClient
+{
+    /**
+     * Identify this class in an assertion.
+     *
+     * @return string
+     */
+    public function identify(): string
+    {
+        return 'subclass';
+    }
+}
 
 /**
  * HttpClientTest class.
@@ -539,5 +558,167 @@ class HttpClientTest extends TestCase
 
         $client->withMethod('DELETE');
         $this->assertSame('DELETE', $client->getMethod());
+    }
+
+    /**
+     * Test that the base URL and resource are joined by exactly one slash.
+     *
+     * Plain concatenation produced a doubled slash — a different path to most
+     * routers — or ran the two together into a different host entirely.
+     *
+     * @param string $baseUrl The configured base URL.
+     * @param string $resource The requested resource.
+     * @param string $expected The endpoint the pair should compose to.
+     * @return void
+     */
+    #[Test]
+    #[DataProvider('endpointCompositionProvider')]
+    public function getEndpointJoinsBaseAndResourceWithOneSlash(
+        string $baseUrl,
+        string $resource,
+        string $expected
+    ): void {
+        $client = HttpClient::make()
+            ->withBaseUrl($baseUrl)
+            ->resource($resource);
+
+        $this->assertSame($expected, $client->getEndpoint());
+    }
+
+    /**
+     * Base URL and resource combinations with the endpoint each composes to.
+     *
+     * @return array<string, array{string, string, string}>
+     */
+    public static function endpointCompositionProvider(): array
+    {
+        return [
+            'plain base and rooted resource' => [
+                'https://api.example.com',
+                '/users',
+                'https://api.example.com/users',
+            ],
+            'trailing slash on base' => [
+                'https://api.example.com/',
+                '/users',
+                'https://api.example.com/users',
+            ],
+            'resource without a leading slash' => [
+                'https://api.example.com',
+                'users',
+                'https://api.example.com/users',
+            ],
+            'slash on neither side' => [
+                'https://api.example.com/',
+                'users',
+                'https://api.example.com/users',
+            ],
+            'base carrying a path' => [
+                'https://api.example.com/v1',
+                '/users',
+                'https://api.example.com/v1/users',
+            ],
+            'base path with a trailing slash' => [
+                'https://api.example.com/v1/',
+                'users',
+                'https://api.example.com/v1/users',
+            ],
+            'resource carrying a query string' => [
+                'https://api.example.com',
+                '/users?page=1',
+                'https://api.example.com/users?page=1',
+            ],
+            'empty resource' => [
+                'https://api.example.com',
+                '',
+                'https://api.example.com',
+            ],
+            'empty base' => [
+                '',
+                'https://api.example.com/users',
+                'https://api.example.com/users',
+            ],
+            'neither configured' => ['', '', ''],
+        ];
+    }
+
+    /**
+     * Test that an absolute resource URL overrides the configured base URL.
+     *
+     * A client configured for one host can still address another directly.
+     *
+     * @return void
+     */
+    #[Test]
+    public function getEndpointUsesAnAbsoluteResourceAsGiven(): void
+    {
+        $client = HttpClient::make()
+            ->withBaseUrl('https://api.example.com')
+            ->resource('https://other.example.org/status');
+
+        $this->assertSame('https://other.example.org/status', $client->getEndpoint());
+    }
+
+    /**
+     * Test that an absolute resource is recognised regardless of its scheme.
+     *
+     * @return void
+     */
+    #[Test]
+    public function getEndpointRecognisesAnyScheme(): void
+    {
+        $client = HttpClient::make()
+            ->withBaseUrl('https://api.example.com')
+            ->resource('HTTP://other.example.org/status');
+
+        $this->assertSame('HTTP://other.example.org/status', $client->getEndpoint());
+    }
+
+    /**
+     * Test that a protocol-relative resource is treated as a path, not a host.
+     *
+     * It carries no scheme, so it cannot stand on its own as a request target.
+     *
+     * @return void
+     */
+    #[Test]
+    public function getEndpointTreatsProtocolRelativeResourceAsAPath(): void
+    {
+        $client = HttpClient::make()
+            ->withBaseUrl('https://api.example.com')
+            ->resource('//other.example.org/status');
+
+        $this->assertSame('https://api.example.com/other.example.org/status', $client->getEndpoint());
+    }
+
+    /**
+     * Test that make() instantiates the class it was called on.
+     *
+     * new self() returned an HttpClient even for a subclass, dropping whatever
+     * behaviour that subclass added.
+     *
+     * @return void
+     */
+    #[Test]
+    public function makeInstantiatesTheCalledClass(): void
+    {
+        $client = HttpClientSubclass::make();
+
+        $this->assertInstanceOf(HttpClientSubclass::class, $client);
+        $this->assertSame('subclass', $client->identify());
+    }
+
+    /**
+     * Test that make() still returns an HttpClient when called on the base class.
+     *
+     * @return void
+     */
+    #[Test]
+    public function makeReturnsBaseClassWhenCalledOnIt(): void
+    {
+        $client = HttpClient::make();
+
+        $this->assertInstanceOf(HttpClient::class, $client);
+        $this->assertNotInstanceOf(HttpClientSubclass::class, $client);
     }
 }

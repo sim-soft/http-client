@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Simsoft\HttpClient\Tests\Traits;
 
+use CurlHandle;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use ReflectionMethod;
 use ReflectionProperty;
 use Simsoft\HttpClient\Traits\CurlOptionsTrait;
 
@@ -199,5 +201,162 @@ class CurlOptionsTraitTest extends TestCase
         $options = $this->getProperty('options');
 
         $this->assertTrue($options[CURLOPT_VERBOSE]);
+    }
+
+    /**
+     * Test that CURLOPT_TIMEOUT given to withOptions() reaches the timeout property.
+     *
+     * applyTransferOptions() writes the property into the option array on every
+     * request, so an entry left in the array alone would be overwritten and the
+     * caller's timeout silently ignored.
+     *
+     * @return void
+     */
+    #[Test]
+    public function withOptionsRoutesTimeoutToTheTimeoutProperty(): void
+    {
+        $this->host->withOptions([CURLOPT_TIMEOUT => 7]);
+
+        $this->assertSame(7, $this->getProperty('timeout'));
+    }
+
+    /**
+     * Test that CURLOPT_CONNECTTIMEOUT given to withOptions() reaches its property.
+     *
+     * @return void
+     */
+    #[Test]
+    public function withOptionsRoutesConnectTimeoutToItsProperty(): void
+    {
+        $this->host->withOptions([CURLOPT_CONNECTTIMEOUT => 3]);
+
+        $this->assertSame(3, $this->getProperty('connectionTimeout'));
+    }
+
+    /**
+     * Test that a timeout set through withOptions() survives applyTransferOptions().
+     *
+     * @return void
+     */
+    #[Test]
+    public function withOptionsTimeoutSurvivesTransferOptions(): void
+    {
+        $handle = curl_init();
+        $this->assertInstanceOf(CurlHandle::class, $handle);
+
+        $this->host->withOptions([CURLOPT_TIMEOUT => 7, CURLOPT_CONNECTTIMEOUT => 3]);
+
+        $apply = new ReflectionMethod($this->host, 'applyTransferOptions');
+        $apply->invoke($this->host, $handle);
+
+        /** @var array<int, mixed> $options */
+        $options = $this->getProperty('options');
+
+        $this->assertSame(7, $options[CURLOPT_TIMEOUT]);
+        $this->assertSame(3, $options[CURLOPT_CONNECTTIMEOUT]);
+
+        curl_close($handle);
+    }
+
+    /**
+     * Test that the last timeout call wins regardless of which API set it.
+     *
+     * @return void
+     */
+    #[Test]
+    public function lastTimeoutCallWinsAcrossBothApis(): void
+    {
+        $this->host->timeout(30)->withOptions([CURLOPT_TIMEOUT => 7]);
+        $this->assertSame(7, $this->getProperty('timeout'));
+
+        $this->host->withOptions([CURLOPT_TIMEOUT => 7])->timeout(12);
+        $this->assertSame(12, $this->getProperty('timeout'));
+    }
+
+    /**
+     * Test that withOptions() rejects a negative timeout the same way timeout() does.
+     *
+     * @return void
+     */
+    #[Test]
+    public function withOptionsRejectsNegativeTimeout(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->host->withOptions([CURLOPT_TIMEOUT => -1]);
+    }
+
+    /**
+     * Test that withOptions() rejects a negative connection timeout.
+     *
+     * @return void
+     */
+    #[Test]
+    public function withOptionsRejectsNegativeConnectTimeout(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->host->withOptions([CURLOPT_CONNECTTIMEOUT => -1]);
+    }
+
+    /**
+     * Test that withOptions() rejects a non-integer timeout naming the option.
+     *
+     * @return void
+     */
+    #[Test]
+    public function withOptionsRejectsNonIntegerTimeout(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('CURLOPT_TIMEOUT must be an integer, string given');
+
+        $this->host->withOptions([CURLOPT_TIMEOUT => '7']);
+    }
+
+    /**
+     * Test that withOptions() rejects a non-integer connection timeout.
+     *
+     * @return void
+     */
+    #[Test]
+    public function withOptionsRejectsNonIntegerConnectTimeout(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('CURLOPT_CONNECTTIMEOUT must be an integer, float given');
+
+        $this->host->withOptions([CURLOPT_CONNECTTIMEOUT => 3.5]);
+    }
+
+    /**
+     * Test that a zero timeout — cURL's "no limit" — passes through withOptions().
+     *
+     * @return void
+     */
+    #[Test]
+    public function withOptionsAcceptsZeroTimeout(): void
+    {
+        $this->host->withOptions([CURLOPT_TIMEOUT => 0]);
+
+        $this->assertSame(0, $this->getProperty('timeout'));
+    }
+
+    /**
+     * Test that other options in the same call are still stored normally.
+     *
+     * @return void
+     */
+    #[Test]
+    public function withOptionsStoresOtherOptionsAlongsideTimeouts(): void
+    {
+        $this->host->withOptions([
+            CURLOPT_TIMEOUT => 7,
+            CURLOPT_MAXREDIRS => 4,
+        ]);
+
+        /** @var array<int, mixed> $options */
+        $options = $this->getProperty('options');
+
+        $this->assertSame(4, $options[CURLOPT_MAXREDIRS]);
+        $this->assertSame(7, $this->getProperty('timeout'));
     }
 }
