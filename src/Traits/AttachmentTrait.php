@@ -42,16 +42,44 @@ trait AttachmentTrait
         $this->hasAttachments = true;
 
         if (is_array($file)) {
-            $name = rtrim($name, '[]') . '[]';
-            foreach ($file as $attachment) {
-                $this->postFields[$name][] = $this->normalizeAttachment($attachment, $filename, $mimeType);
-            }
-
+            $this->attachMany($name, $file, $filename, $mimeType);
             return $this;
         }
 
         $this->postFields[$name] = $this->normalizeAttachment($file, $filename, $mimeType);
         return $this;
+    }
+
+    /**
+     * Attach several files under one field name.
+     *
+     * Each file gets an explicitly indexed name — `files[0]`, `files[1]` — rather
+     * than a bare `files[]`. cURL sends a multipart field name verbatim and does
+     * not expand `[]` into successive indices the way a browser does, so a shared
+     * `files[]` key would need one array entry per file and the index has to be
+     * written out. Indices continue from any files already attached under the
+     * same name, so repeated calls append instead of overwriting.
+     *
+     * @param string $name Attribute name, with or without a trailing `[]`.
+     * @param array<array-key, mixed> $files
+     * @param string|null $filename
+     * @param string|null $mimeType
+     * @return void
+     * @throws Exception
+     */
+    protected function attachMany(string $name, array $files, ?string $filename, ?string $mimeType): void
+    {
+        $base = str_ends_with($name, '[]') ? substr($name, 0, -2) : $name;
+        $index = 0;
+
+        foreach ($files as $attachment) {
+            while (isset($this->postFields["{$base}[$index]"])) {
+                ++$index;
+            }
+
+            $this->postFields["{$base}[$index]"] = $this->normalizeAttachment($attachment, $filename, $mimeType);
+            ++$index;
+        }
     }
 
     /**
@@ -68,7 +96,7 @@ trait AttachmentTrait
     protected function normalizeAttachment(mixed $file, ?string $filename = null, ?string $mimeType = null): string|CURLFile
     {
         if ($file instanceof CURLFile) {
-            return $file;
+            return $this->normalizeCurlFileAttachment($file, $filename);
         }
 
         if (is_resource($file)) {
@@ -84,6 +112,34 @@ trait AttachmentTrait
         }
 
         throw new InvalidArgumentException('Unsupported file type for attachment.');
+    }
+
+    /**
+     * Normalize a caller-supplied CURLFile.
+     *
+     * A CURLFile constructed without a posted filename reports an empty one, and
+     * cURL then falls back to the full local path — so `new CURLFile('/srv/app/
+     * storage/invoices/2026-03.pdf')` puts that path in the part header for the
+     * server to log. The basename is substituted so only the file's own name is
+     * sent, matching what the other input types already do. An explicit filename
+     * is applied on a copy, leaving the caller's object untouched.
+     *
+     * @param CURLFile $file The caller-supplied file.
+     * @param string|null $filename Optional posted filename.
+     * @return CURLFile
+     */
+    protected function normalizeCurlFileAttachment(CURLFile $file, ?string $filename): CURLFile
+    {
+        $posted = $filename ?? ($file->getPostFilename() ?: basename($file->getFilename()));
+
+        if ($posted === $file->getPostFilename()) {
+            return $file;
+        }
+
+        $copy = clone $file;
+        $copy->setPostFilename($posted);
+
+        return $copy;
     }
 
     /**

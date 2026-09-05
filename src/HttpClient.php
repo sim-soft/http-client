@@ -868,7 +868,10 @@ class HttpClient implements ClientInterface
     /**
      * Flatten a multi-dimensional array for multipart/form-data.
      *
-     * @param array<string, mixed> $data
+     * Produces the same field names as http_build_query(), so a payload sent as
+     * multipart arrives on the server in the same shape as one sent form-encoded.
+     *
+     * @param array<array-key, mixed> $data
      * @param string|null $prefix
      * @return array<string, mixed>
      */
@@ -876,15 +879,41 @@ class HttpClient implements ClientInterface
     {
         $result = [];
         foreach ($data as $key => $value) {
-            $name = $prefix ? "{$prefix}[$key]" : $key;
+            // A "0" prefix is a falsy string, so an emptiness test here would drop
+            // the parent name and collapse the first branch of a list into the root.
+            $name = $prefix === null ? (string)$key : "{$prefix}[$key]";
 
             if (is_array($value)) {
-                $result = array_merge($result, $this->flattenMultipartData($value, $name));
+                // Union, not array_merge: merge renumbers integer-like keys, which
+                // are exactly the names a list produces.
+                $result += $this->flattenMultipartData($value, $name);
                 continue;
             }
-            $result[$name] = $value;
+
+            $result[$name] = $this->normalizeMultipartValue($value);
         }
-        return $result;
+
+        return array_filter($result, static fn(mixed $value): bool => $value !== null);
+    }
+
+    /**
+     * Convert a scalar multipart value to the string cURL will send.
+     *
+     * cURL stringifies a bool by casting, so false becomes "" — an empty field
+     * rather than the "0" the same payload produces when form-encoded. Booleans
+     * are converted here so both encodings agree, and null is returned as-is for
+     * the caller to drop, matching http_build_query() omitting a null entirely.
+     *
+     * @param mixed $value
+     * @return mixed
+     */
+    private function normalizeMultipartValue(mixed $value): mixed
+    {
+        if (is_bool($value)) {
+            return $value ? '1' : '0';
+        }
+
+        return $value;
     }
 
     /**

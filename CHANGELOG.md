@@ -112,6 +112,39 @@ fact, so they summarise each release rather than list every change.
   Both are now reported, with the provider's `error` and `error_description`
   when present.
 
+- **Multipart requests were sent form-encoded.** `withMultipart()` set the
+  content type only when called a second time, so the documented single call —
+  and `post($url, $array)`, which routes through it — sent
+  `application/x-www-form-urlencoded` with a `http_build_query()` body. An
+  endpoint expecting a multipart upload rejected it, and a file attached
+  alongside the fields could not be sent at all.
+
+- **Multiple files attached under one name arrived unusable.** `attach()` sent
+  every file in an array under a literal `files[]` key, which cURL transmits
+  verbatim rather than expanding into successive indices as a browser does, so
+  the parts were named `files[][0]`, `files[][1]` and a PHP server parsed them
+  into a ragged nested array instead of a list. Parts are now named `files[0]`,
+  `files[1]`. Repeated calls under the same name append rather than overwrite.
+
+- **A local filesystem path was disclosed as the upload filename.** A `CURLFile`
+  built without a posted filename — the form shown first in the README — reports
+  an empty one, and cURL then falls back to the full local path, putting it in
+  the part header for the receiving server to store and log. The basename is now
+  substituted, matching the other attachment types. The caller's object is not
+  modified.
+
+- **Nested multipart fields were misnamed and booleans mistyped.** A falsy test
+  on the recursion prefix dropped the parent name for key `0`, so the first
+  branch of a list collapsed into the root and could overwrite a sibling; array
+  merging also renumbered integer-like names. Field names now match
+  `http_build_query()` exactly. `false` is sent as `"0"` rather than an empty
+  string, and `null` is omitted, so a payload sent as multipart arrives in the
+  same shape as one sent form-encoded.
+
+- **`withMultipart()` leaked an owned body stream.** Replacing a body set with
+  `withBodyStream()` left the previous stream open and still marked as owned,
+  unlike `withBody()` which closes it. It is now closed.
+
 - **`SessionStorage` no longer discards tokens silently.** The constructor
   ignored a failed `session_start()`, so where the session could not be started
   — headers already sent, save handler unavailable — tokens were written into a
@@ -134,6 +167,16 @@ fact, so they summarise each release rather than list every change.
 
 - `withHeader()` and `withHeaders()` had inaccurate `@param` annotations
   (`array<string, mixed>` where a list is also accepted); corrected.
+
+- **`withMultipart()` now sets the multipart content type on the first call.**
+  A single call previously left the type unset and the request went out
+  form-encoded; it now sends `multipart/form-data` as documented. Code that
+  relied on the old behaviour to send form-encoded data should call `withForm()`.
+
+- **Multiple files attached under one name are sent as `files[0]`, `files[1]`
+  instead of `files[]`.** A server that read the previous ragged nesting rather
+  than a list will need updating; a server using a normal multipart parser
+  receives the list it always expected.
 
 - **OAuth2 storage keys have a new composition.** Tokens, PKCE verifiers and
   CSRF states were stored under `{clientId}`, `{clientId}_pkce_verifier` and

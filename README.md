@@ -285,7 +285,8 @@ $client->attach('file', fopen('path/to/doc.pdf', 'r'), 'doc.pdf')->post('/upload
 $client->attach('file', 'file content here', 'note.txt', 'text/plain')->post('/upload');
 ```
 
-Multiple files:
+Multiple files under one field name. The parts are named `files[0]`, `files[1]`
+and so on, which a server reads as a list:
 
 ```php
 $client->attach('files', [
@@ -293,6 +294,11 @@ $client->attach('files', [
     new CURLFile('path/to/file2.pdf'),
 ])->post('/upload');
 ```
+
+Calling `attach()` again with the same name appends rather than replaces.
+
+The posted filename defaults to the file's basename, so the local directory is
+never sent. Pass a filename explicitly to override it.
 
 ## Downloading Files
 
