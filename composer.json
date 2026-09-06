@@ -1,6 +1,6 @@
 {
   "name": "simsoft/http-client",
-  "description": "A fluent, zero-dependency PHP HTTP client with built-in OAuth2, retry, middleware, and streaming — powered by cURL.",
+  "description": "A fluent PHP HTTP client with built-in OAuth2, retry, middleware, and streaming — powered by cURL.",
   "keywords": [
     "http-client",
     "curl",

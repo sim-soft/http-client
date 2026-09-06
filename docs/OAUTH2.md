@@ -49,10 +49,11 @@ caching, expiry detection, and automatic refresh — using only the library's ow
 
 ### Reference
 
-19. [TokenData Value Object](#oauth2-tokendata)
-20. [StorageInterface](#storage-interface)
-21. [Storage Notes](#session-storage)
-22. [Comparison with Other Libraries](#comparison)
+19. [OAuth2TokenResponse](#oauth2-token-response)
+20. [TokenData Value Object](#oauth2-tokendata)
+21. [StorageInterface](#storage-interface)
+22. [Storage Notes](#session-storage)
+23. [Comparison with Other Libraries](#comparison)
 
 ---
 
@@ -151,6 +152,8 @@ $token = MyApiOAuth2::request('sandbox-id', 'sandbox-secret')
 
 ## Custom Scope<a id="oauth2-scope"></a>
 
+If your application always asks for the same scope, declare it on the subclass:
+
 ```php
 class MyApiOAuth2 extends OAuth2
 {
@@ -160,6 +163,33 @@ class MyApiOAuth2 extends OAuth2
 ```
 
 When `$scope` is `null` (default), the `scope` parameter is omitted entirely.
+
+### Setting the scope per call
+
+Use `withScope()` when the scope depends on what the code is about to do, rather
+than on the class:
+
+```php
+$reader = MyApiOAuth2::request('client-id', 'client-secret')
+    ->withScope('read:users');
+
+$writer = MyApiOAuth2::request('client-id', 'client-secret')
+    ->withScope('read:users write:orders');
+```
+
+Pass `null` to drop the scope for one call, overriding whatever the subclass
+declares.
+
+**Each scope gets its own cached token.** The scope is part of the storage key
+(see [How the storage key is composed](#how-the-storage-key-is-composed)), so `$reader` above
+never receives `$writer`'s token — it requests one of its own on first use, and
+reuses that one afterwards. This is what you want: a token granted `write:orders`
+must not leak into code that only asked to read.
+
+The practical consequence is that changing the scope means an extra round trip to
+the token endpoint, not a cache hit. Ask for a narrow scope in the code paths
+that need only that, and accept the one extra request — do not widen the scope
+just to share a cache entry.
 
 ---
 
@@ -725,6 +755,107 @@ Override `buildIntrospectionParams()` for provider-specific needs.
 
 ---
 
+## OAuth2TokenResponse<a id="oauth2-token-response"></a>
+
+The raw response from the token endpoint, before it becomes a
+[TokenData](#oauth2-tokendata). Most applications never touch it — `OAuth2`
+parses it for you. You meet it in one place: the `$response` argument when you
+override `toTokenData()`, as in [Custom Metadata](#oauth2-metadata).
+
+It extends `Response`, so everything there is available too —
+[`successful()` and the other status checks](README.md#status-checks), and
+[`data()`, `json()` and friends](README.md#reading-data).
+
+**Methods:**
+
+| Method              | Returns   | Description                                        |
+|---------------------|-----------|----------------------------------------------------|
+| `getToken()`        | `?string` | The `access_token`                                 |
+| `getTokenType()`    | `?string` | The `token_type`, typically `"Bearer"`             |
+| `getExpiresIn()`    | `?int`    | Lifetime **in seconds**, as the server sent it     |
+| `getExpiresAt()`    | `?int`    | Absolute Unix timestamp: `time()` + `getExpiresIn()` |
+| `getRefreshToken()` | `?string` | The `refresh_token`                                |
+| `getScope()`        | `?string` | The scope the server actually granted              |
+| `getError()`        | `?string` | The OAuth2 error, or `null` if there was none      |
+
+Every one returns `null` when the server omitted that field.
+
+```php
+protected function toTokenData(OAuth2TokenResponse $response): TokenData
+{
+    $response->getToken();        // "eyJhbGciOi..."
+    $response->getTokenType();    // "Bearer"
+    $response->getExpiresIn();    // 3600      — seconds from now
+    $response->getExpiresAt();    // 1714000770 — a timestamp
+    $response->getRefreshToken(); // "def50200..."
+    $response->getScope();        // "read:users"
+
+    return parent::toTokenData($response);
+}
+```
+
+### `getExpiresIn()` and `getExpiresAt()` are not the same number
+
+`getExpiresIn()` is a **duration** — the 3600 the server sent, meaning "one hour
+from whenever you asked". `getExpiresAt()` is an **instant** — that duration
+added to the current time, which is what you store and compare against later.
+
+Storing 3600 where a timestamp belongs produces a token that appears to have
+expired in 1970; comparing a timestamp against 3600 produces one that never
+expires. `TokenData::$expiresAt` is a timestamp, so `getExpiresAt()` is the one
+that feeds it.
+
+If the server omits `expires_in`, both return `null`. `OAuth2` then assumes a
+one-hour lifetime rather than treating the token as immortal.
+
+### The granted scope may not be the requested scope
+
+`getScope()` reports what the server granted, which a provider is free to narrow.
+Asking for `read:users write:orders` and receiving `read:users` is a normal
+response, not an error — the write calls will simply come back 403. Read
+`getScope()` if that distinction matters to you.
+
+### `getError()` must be checked even on a 200
+
+RFC 6749 §5.2 defines an `error` member for failed token requests, and not every
+provider pairs it with a 4xx status. A response can be `successful()` and still
+carry no token:
+
+```php
+// A real 200 response from a provider rejecting the request:
+// {"error":"invalid_scope","error_description":"The requested scope is invalid"}
+
+$response->successful();   // true  — the HTTP transfer worked
+$response->getToken();     // null  — but there is no token
+$response->getError();     // "invalid_scope: The requested scope is invalid"
+```
+
+`getError()` combines the `error` code with `error_description` when the server
+supplies one, and returns `null` when there is no error at all.
+
+You do not have to remember this for ordinary use. `OAuth2` checks `getError()`
+on every token response and throws instead of caching an empty credential — the
+failure surfaces at the token request, with the provider's own message, rather
+than as unexplained 401s from the resource server later on. It reaches you
+through `getTokenData()` returning `null` and through the
+[`onTokenFailed()`](#oauth2-events) callback:
+
+```php
+$oauth = MyApiOAuth2::request('client-id', 'client-secret')
+    ->onTokenFailed(function (Throwable $e): void {
+        // "Token request failed: invalid_scope: The requested scope is invalid"
+        error_log($e->getMessage());
+    });
+
+$oauth->getAccessToken(); // null
+```
+
+The check matters when you override `toTokenData()`: build your `TokenData` from
+`parent::toTokenData($response)` as the examples above do, and the validation
+stays in place.
+
+---
+
 ## TokenData Value Object<a id="oauth2-tokendata"></a>
 
 Serializable value object representing an OAuth2 token.
@@ -848,7 +979,7 @@ the exception.
 
 | Aspect                | **Simsoft OAuth2**                     | **league/oauth2-client**      | **Laravel Socialite** | **Guzzle + manual** |
 |-----------------------|----------------------------------------|-------------------------------|-----------------------|---------------------|
-| **Dependencies**      | None (ext-curl only)                   | Guzzle + PSR packages         | Laravel framework     | Guzzle              |
+| **Packages installed**| 4 (3 are interface-only PSR pkgs)      | 10 (pulls Guzzle)             | Laravel framework     | 8 (Guzzle)          |
 | **Grant types**       | client_credentials, auth_code, refresh | All (+ password, custom)      | Auth code only        | Manual              |
 | **PKCE (S256)**       | ✅ Built-in                             | ✅ Via provider option         | ❌                     | Manual              |
 | **Token caching**     | ✅ Built-in                             | ❌ You manage it               | Session-based         | ❌                   |
@@ -862,7 +993,7 @@ the exception.
 
 | Choose                   | When                                                                                       |
 |--------------------------|--------------------------------------------------------------------------------------------|
-| **Simsoft OAuth2**       | Zero dependencies, automatic token lifecycle, subclass-based API. Ideal for microservices. |
+| **Simsoft OAuth2**       | Minimal dependency tree, automatic token lifecycle, subclass-based API. Ideal for microservices. |
 | **league/oauth2-client** | Need pre-built provider packages with user info fetching.                                  |
 | **Laravel Socialite**    | Laravel app needing social login with minimal setup.                                       |
 | **Guzzle + manual**      | Full control over every OAuth2 step, already in a Guzzle stack.                            |

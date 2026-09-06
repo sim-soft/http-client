@@ -10,6 +10,86 @@ fact, so they summarise each release rather than list every change.
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-09-07
+
+### Changed
+
+- **The distributed package no longer carries development material.**
+  `.gitattributes` now marks `tests/`, `.kiro/`, `.github/`, the PHPUnit,
+  PHPStan, PHPMD and PHPCS configs, the PHPCS baseline, the IDE workspace file
+  and `.editorconfig` as `export-ignore`. The dist archive drops from 130 files
+  to 54, and from 1.2 MB to 460 KB — what remains is `src/` (35 files), `docs/`
+  (14), `composer.json`, the README, this changelog, the licence and the
+  security policy. Well over half of every `composer require` download was
+  previously material a consumer cannot use: none of it is autoloaded, since
+  `autoload` maps `src/` only and `tests/` sits under `autoload-dev`, which
+  Composer ignores for dependencies.
+
+  Nothing a consumer can reach was removed. `FakeHttpClient` and the rest of
+  the testing helpers live in `src/Testing/`, not `tests/`, so test suites
+  built on them are unaffected. `docs/` is kept as the offline copy of the
+  tutorials the README links to. Verified by installing the trimmed archive
+  into an empty project: it resolves to four packages, autoloads every
+  consumer-facing class, and completes a live HTTPS request.
+
+### Added
+
+- **Integration tests that perform real HTTP transfers.** The existing suite
+  asserts on cURL options before execution and never opens a socket, so
+  response parsing, redirect following, sink streaming and concurrent
+  transfers had no coverage against a real server. These run against a PHP
+  built-in server on the loopback interface and need no network access.
+
+### Fixed
+
+- **A broken anchor in the online documentation.** The Timeouts entry in the
+  `docs/README.md` table of contents used a GitHub-style slug, which docsify
+  does not generate for a heading containing an ampersand, so the link
+  resolved to nothing and the click scrolled nowhere.
+
+### Documentation
+
+- **The response status predicates are documented in full.** The README listed
+  8 of the 19 available checks. All 19 are now covered, split into broad
+  checks and exact status codes, along with the request-body helpers
+  `asMultipart()` and `asRaw()`, the connection-tuning options
+  `withBufferSize()`, `withDNSTimeout()` and `withoutReturnTransfer()`, and
+  the rules governing which requests a retry actually repeats — a 5xx is
+  retried only for `GET`, `HEAD` and `OPTIONS`, so a failed `POST` cannot be
+  replayed into a duplicate order or charge.
+
+- **The OAuth2 token response is documented.** `OAUTH2.md` covered the client
+  but stopped at the response it parses, leaving `getTokenType()`,
+  `getExpiresIn()`, `getExpiresAt()`, `getRefreshToken()`, `getScope()` and
+  `getError()` undiscoverable, along with `withScope()` on the client. Three
+  behaviours that are not guessable from the signatures are now called out:
+  `getExpiresIn()` is a duration and `getExpiresAt()` an instant; `getError()`
+  must be consulted even on a 2xx response, because RFC 6749 §5.2 lets a
+  provider report failure in the body; and the scope forms part of the token
+  cache key, so each scope caches its own token.
+
+- **The library comparison is now measured rather than asserted.**
+  `COMPARISON.md` claimed "zero dependencies / only requires ext-curl", which
+  is not what `composer require` does — it installs four packages. The claim
+  was true in spirit and wrong in fact, and a reader who checked would have
+  found it wrong. The table now reports package counts and installed sizes
+  taken from a real `composer install --no-dev` for each library, and explains
+  what the three PSR packages actually are: interface-only, no implementation
+  code, no transitive dependencies. Comparison figures are dated and version-
+  pinned so they can be re-checked. Two trade-offs that were missing are now
+  stated — PSR-7 is implemented on the response side only, and there is no
+  third-party provider ecosystem — alongside the built-in OAuth2 row, which is
+  the clearest advantage over the alternatives and was absent from the table.
+
+- **The same claim is corrected everywhere else it appeared.** The package
+  description on Packagist and the opening line of both READMEs described the
+  library as having "zero runtime dependencies". The READMEs now say what is
+  verifiable: the only dependencies are the PSR interface packages, which ship
+  no implementation code. The Packagist description drops the claim rather than
+  qualifying it, since a one-line blurb is the wrong place to explain a
+  dependency tree — `COMPARISON.md` carries the detail. Nothing about the
+  dependencies changed, only the description of them.
+
 ## [2.3.0] - 2026-09-06
 
 ### Security
@@ -460,7 +540,8 @@ fact, so they summarise each release rather than list every change.
 
 Initial release.
 
-[Unreleased]: https://github.com/sim-soft/http-client/compare/2.3.0...HEAD
+[Unreleased]: https://github.com/sim-soft/http-client/compare/2.4.0...HEAD
+[2.4.0]: https://github.com/sim-soft/http-client/compare/2.3.0...2.4.0
 [2.3.0]: https://github.com/sim-soft/http-client/compare/2.2.4...2.3.0
 [2.2.4]: https://github.com/sim-soft/http-client/compare/2.2.3...2.2.4
 [2.2.3]: https://github.com/sim-soft/http-client/compare/2.2.2...2.2.3
