@@ -83,10 +83,12 @@ fact, so they summarise each release rather than list every change.
 
 - **The same claim is corrected everywhere else it appeared.** The package
   description on Packagist and the opening line of both READMEs described the
-  library as having "zero runtime dependencies". They now say what is
+  library as having "zero runtime dependencies". The READMEs now say what is
   verifiable: the only dependencies are the PSR interface packages, which ship
-  no implementation code. Nothing about the dependency tree changed — only the
-  description of it.
+  no implementation code. The Packagist description drops the claim rather than
+  qualifying it, since a one-line blurb is the wrong place to explain a
+  dependency tree — `COMPARISON.md` carries the detail. Nothing about the
+  dependencies changed, only the description of them.
 
 ## [2.3.0] - 2026-09-06
 
