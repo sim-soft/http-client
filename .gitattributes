@@ -348,8 +348,8 @@ Procfile          text
 #
 # Everything below is needed in the repository and useless to a consumer who
 # runs `composer require`: it is not autoloaded, not referenced by src/, and
-# only inflates the download. Without these rules the dist archive is 166
-# files, of which the library itself is 45.
+# only inflates the download. Without these rules the dist archive is 130
+# files, of which the library itself is 35.
 #
 /.editorconfig              export-ignore
 /.github/                   export-ignore
