@@ -81,6 +81,13 @@ fact, so they summarise each release rather than list every change.
   third-party provider ecosystem — alongside the built-in OAuth2 row, which is
   the clearest advantage over the alternatives and was absent from the table.
 
+- **The same claim is corrected everywhere else it appeared.** The package
+  description on Packagist and the opening line of both READMEs described the
+  library as having "zero runtime dependencies". They now say what is
+  verifiable: the only dependencies are the PSR interface packages, which ship
+  no implementation code. Nothing about the dependency tree changed — only the
+  description of it.
+
 ## [2.3.0] - 2026-09-06
 
 ### Security

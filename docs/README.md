@@ -6,10 +6,11 @@
 
 ## Introduction
 
-Simsoft HttpClient is a fluent PHP HTTP client built on `ext-curl` with zero
-runtime dependencies. PSR-7/PSR-18 compliant, it supports concurrent requests,
-built-in retry, middleware, and test doubles — all in a single lightweight
-package.
+Simsoft HttpClient is a fluent PHP HTTP client built on `ext-curl`. PSR-7/PSR-18
+compliant, it supports concurrent requests, built-in retry, middleware, and test
+doubles — all in a single lightweight package whose only dependencies are the
+PSR interface packages, which ship no implementation code. See
+[Comparison](COMPARISON) for the measured figures.
 
 ```php
 $response = HttpClient::make()

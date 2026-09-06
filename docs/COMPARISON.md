@@ -30,14 +30,14 @@ into an empty project, so they are what a consumer actually downloads.
 | **Standalone**                | ✅                                  | ✅                                   | ✅                                 | ❌ requires Laravel      |
 | **Installed size (`--no-dev`)** | ~817 KB                          | ~2.3 MB                             | ~1.1 MB                           | ~37 MB (framework)      |
 
-### A note on "zero dependencies"
+### What the dependency count means
 
 `composer require simsoft/http-client` installs four packages: this library plus
 `psr/http-message`, `psr/http-client` and `psr/http-factory`. Those three contain
 **interfaces only** — no implementation code, no transitive dependencies of their
 own — so nothing is pulled in that could conflict with your stack or need its own
-updates. That is what "zero dependency core" means here: no functional
-dependencies beyond `ext-curl`, not an empty `require` block.
+updates. Beyond `ext-curl` there is no functional dependency, but the `require`
+block is not empty and this documentation does not claim otherwise.
 
 The comparison that matters is the shape of the tree, not the count. Guzzle's
 eight packages include a promise engine, a PSR-7 implementation and two Symfony
