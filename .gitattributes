@@ -342,3 +342,22 @@ Procfile          text
 
 # Ignore files (like .npmignore or .gitignore)
 *.*ignore         text
+
+#
+# Exclude development material from the distributed package
+#
+# Everything below is needed in the repository and useless to a consumer who
+# runs `composer require`: it is not autoloaded, not referenced by src/, and
+# only inflates the download. Without these rules the dist archive is 166
+# files, of which the library itself is 45.
+#
+/.editorconfig              export-ignore
+/.github/                   export-ignore
+/.kiro/                     export-ignore
+/baseline.xml               export-ignore
+/httpclient.code-workspace  export-ignore
+/phpcs.xml                  export-ignore
+/phpmd.xml                  export-ignore
+/phpstan.neon               export-ignore
+/phpunit.xml                export-ignore
+/tests/                     export-ignore
