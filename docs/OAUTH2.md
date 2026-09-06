@@ -979,7 +979,7 @@ the exception.
 
 | Aspect                | **Simsoft OAuth2**                     | **league/oauth2-client**      | **Laravel Socialite** | **Guzzle + manual** |
 |-----------------------|----------------------------------------|-------------------------------|-----------------------|---------------------|
-| **Dependencies**      | None (ext-curl only)                   | Guzzle + PSR packages         | Laravel framework     | Guzzle              |
+| **Packages installed**| 4 (3 are interface-only PSR pkgs)      | 10 (pulls Guzzle)             | Laravel framework     | 8 (Guzzle)          |
 | **Grant types**       | client_credentials, auth_code, refresh | All (+ password, custom)      | Auth code only        | Manual              |
 | **PKCE (S256)**       | ✅ Built-in                             | ✅ Via provider option         | ❌                     | Manual              |
 | **Token caching**     | ✅ Built-in                             | ❌ You manage it               | Session-based         | ❌                   |
@@ -993,7 +993,7 @@ the exception.
 
 | Choose                   | When                                                                                       |
 |--------------------------|--------------------------------------------------------------------------------------------|
-| **Simsoft OAuth2**       | Zero dependencies, automatic token lifecycle, subclass-based API. Ideal for microservices. |
+| **Simsoft OAuth2**       | Minimal dependency tree, automatic token lifecycle, subclass-based API. Ideal for microservices. |
 | **league/oauth2-client** | Need pre-built provider packages with user info fetching.                                  |
 | **Laravel Socialite**    | Laravel app needing social login with minimal setup.                                       |
 | **Guzzle + manual**      | Full control over every OAuth2 step, already in a Guzzle stack.                            |
