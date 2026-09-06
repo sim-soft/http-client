@@ -45,7 +45,7 @@ composer require simsoft/http-client
 ### Configuration
 
 - [Headers](#headers)
-- [Timeouts & cURL Options](#timeouts--curl-options)
+- [Timeouts & cURL Options](#timeouts-curl-options)
 - [Authentication](#authentication)
 
 ### Responses
@@ -163,7 +163,7 @@ Header names must be valid RFC 7230 tokens, and values may not contain line
 breaks or NUL bytes. Both throw `InvalidArgumentException`, so a user-supplied
 value forwarded into a header cannot forge additional headers on the wire.
 
-## Timeouts & cURL Options
+## Timeouts & cURL Options<a id="timeouts-curl-options"></a>
 
 ```php
 $response = HttpClient::make()
