@@ -100,7 +100,7 @@ if ($response->ok()) {
 }
 ```
 
-The base URL and the path are joined by exactly one slash, so a trailing slash
+Exactly one slash joins the base URL and the path, so a trailing slash
 on the base or a missing leading slash on the path make no difference. A path
 given as an absolute URL is used as-is, letting a configured client address
 another host directly.
@@ -139,7 +139,7 @@ $client->post('/upload', ['field' => 'value']);  // default for POST arrays
 // Raw body
 $client->withRaw('<xml>data</xml>', 'application/xml')->post('/endpoint');
 
-// Stream body (client takes ownership, closes after request)
+// Stream body (The client takes ownership, closes after request)
 $client->withBodyStream(new MyStream(), 'application/pdf')->post('/upload');
 
 // GraphQL
@@ -179,7 +179,7 @@ $response = HttpClient::make()
 
 `CURLOPT_TIMEOUT` and `CURLOPT_CONNECTTIMEOUT` may also be passed to
 `withOptions()`; they are routed to `timeout()` and `connectionTimeout()`, so
-the last call wins whichever form is used. A non-integer value for either
+the last call wins whichever form is used. A noninteger value for either
 throws `InvalidArgumentException`.
 
 ## Authentication
@@ -188,7 +188,7 @@ throws `InvalidArgumentException`.
 // Bearer token
 $client = HttpClient::make()->withBearerToken('YOUR_TOKEN');
 
-// The token is connection-scoped: set it once and it is sent with every
+// The token is connection-scoped: set it once, and it is sent with every
 // request made through this client. Headers added with withHeader() are
 // per-request and are cleared after each request.
 $client->get('/users');    // Authorization: Bearer YOUR_TOKEN
