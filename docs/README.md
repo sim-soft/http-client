@@ -133,9 +133,11 @@ $client->asForm()->post('/login', ['email' => 'a@b.com']);
 // Multipart form-data
 $client->withMultipart(['field' => 'value'])->post('/upload');
 $client->post('/upload', ['field' => 'value']);  // default for POST arrays
+$client->asMultipart()->post('/upload', ['field' => 'value']);  // shorthand
 
 // Raw body
 $client->withRaw('<xml>data</xml>', 'application/xml')->post('/endpoint');
+$client->asRaw()->post('/endpoint', 'plain text');  // text/plain
 
 // Stream body (The client takes ownership, closes after request)
 $client->withBodyStream(new MyStream(), 'application/pdf')->post('/upload');
@@ -180,6 +182,27 @@ $response = HttpClient::make()
 the last call wins whichever form is used. A noninteger value for either
 throws `InvalidArgumentException`.
 
+### Tuning the connection
+
+These are optional. The defaults are fine for ordinary API calls, and are worth
+changing mainly when moving large files or making many requests to one host:
+
+```php
+$response = HttpClient::make()
+    ->withBufferSize(131072)   // read buffer in bytes (default 8192)
+    ->withDNSTimeout(120)      // seconds to cache a resolved hostname
+    ->get('https://api.example.com/large-file');
+```
+
+A larger buffer means fewer read calls, which helps when downloading big files;
+128 KB (`131072`) is a reasonable choice. `withDNSTimeout()` keeps a resolved
+hostname cached, saving a DNS lookup on every request to the same host.
+
+There is also `withoutReturnTransfer()`, which makes cURL write the body
+straight to PHP's output instead of returning it. The response body will then
+be empty, so use it only when streaming a file directly to the browser — for
+saving to disk, prefer `sink()` (see [Downloading Files](#downloading-files)).
+
 ## Authentication
 
 ```php
@@ -202,27 +225,92 @@ $client->withoutBearerToken();
 
 ## Status Checks
 
+Rather than comparing `getStatusCode()` yourself, ask the response a question.
+Each method below returns a plain `true` or `false`.
+
 ```php
-$response->ok();              // 200
-$response->created();         // 201
-$response->noContent();       // 204
-$response->successful();      // 2xx
+$response = HttpClient::make()->get('https://api.example.com/users');
 
-$response->badRequest();      // 400
-$response->unauthorized();    // 401
-$response->forbidden();       // 403
-$response->notFound();        // 404
-$response->tooManyRequests(); // 429
-$response->isClientError();   // 4xx
-
-$response->isServerError();   // 5xx
-$response->isNetworkError();  // cURL error (timeout, DNS, etc.)
-$response->failed();          // 4xx or 5xx or network error
-
-$response->getStatusCode();   // int
-$response->getMessage();      // reason phrase or cURL error
-$response->getTotalTime();    // float (seconds)
+if ($response->successful()) {
+    // any 2xx — the usual "did it work?" check
+}
 ```
+
+### Broad checks
+
+Start here. These cover whole ranges and are what most code needs:
+
+```php
+$response->successful();     // 2xx — request worked
+$response->isRedirect();     // 3xx
+$response->isClientError();  // 4xx — you sent something wrong
+$response->isServerError();  // 5xx — the server broke
+$response->isNetworkError(); // never reached the server (timeout, DNS, refused)
+$response->failed();         // 4xx, 5xx, or a network error
+$response->hasError();       // identical to failed(), read better in some code
+```
+
+`failed()` includes network errors, so it is the safest single check: a request
+that timed out has no status code to inspect, and `isServerError()` alone would
+report `false` for it.
+
+### Exact status codes
+
+Use these when one specific code changes what your program does — for example,
+retrying only on 429, or treating 404 as an empty result rather than an error:
+
+```php
+// 2xx
+$response->ok();                   // 200
+$response->created();              // 201
+$response->accepted();             // 202
+$response->noContent();            // 204
+
+// 3xx
+$response->movedPermanently();     // 301
+$response->found();                // 302
+$response->notModified();          // 304
+
+// 4xx
+$response->badRequest();           // 400
+$response->unauthorized();         // 401 — missing or invalid credentials
+$response->forbidden();            // 403 — authenticated, but not allowed
+$response->notFound();             // 404
+$response->methodNotAllowed();     // 405
+$response->conflict();             // 409
+$response->unprocessableEntity();  // 422 — validation failed
+$response->tooManyRequests();      // 429 — rate limited
+
+// 5xx
+$response->internalServerError();  // 500
+```
+
+The 3xx checks need one extra step. Redirects are followed automatically, so by
+the time you get a response it is usually the 200 from the final destination.
+To inspect the redirect itself, turn following off:
+
+```php
+$response = HttpClient::make()
+    ->withOptions([CURLOPT_FOLLOWLOCATION => false])
+    ->get('https://example.com/old-page');
+
+$response->isRedirect();                  // true
+$response->found();                       // true (302)
+$response->getHeaderLine('Location');     // where it points
+```
+
+### Other response details
+
+```php
+$response->getStatusCode();   // int
+$response->getMessage();      // reason phrase, or the cURL error message
+$response->getTotalTime();    // float (seconds)
+$response->isJson();          // true if the body is JSON
+```
+
+`isJson()` checks the `Content-Type` header first and, if that is missing or
+unhelpful, looks at the first byte of the body — so it still works against APIs
+that return JSON without labelling it.
 
 ## Reading Data
 
@@ -332,6 +420,18 @@ $response = HttpClient::make()->retry(3)->get('https://api.example.com/data');
 // Retry 3 times, 500ms between attempts
 $response = HttpClient::make()->retry(3, after: 500)->get('https://api.example.com/data');
 ```
+
+Without `retryWhen()`, the client decides for you, and the rules are
+deliberately cautious:
+
+- A retryable network error (timeout, connection refused, DNS failure) is
+  always retried — the request may never have reached the server.
+- A 5xx is retried **only for `GET`, `HEAD` and `OPTIONS`**. Repeating a failed
+  `POST` could create a second order or charge a card twice, so it is not
+  retried automatically. Use `retryWhen()` if your endpoint is safe to repeat.
+- A 4xx is never retried. Sending the same bad request again will fail again.
+- A request whose body is a non-seekable stream is never retried, because the
+  body cannot be rewound and read a second time.
 
 Custom retry conditions with `retryWhen()`:
 
