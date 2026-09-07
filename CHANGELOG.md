@@ -10,6 +10,36 @@ fact, so they summarise each release rather than list every change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`revokeToken()` evicted the cache entry for whichever subject the client
+  was currently bound to, not the one holding the revoked token.** The two are
+  not always the same entry: the cache is keyed by client, subject, endpoint
+  and scope. Revoking one user's token through a client bound to another
+  dropped the second user's still-valid token, while the revoked one stayed
+  cached and was served until it expired — every request with it returning 401.
+  The entry is now removed only when it holds the revoked token, compared
+  against both the access and the refresh token, since revoking a refresh token
+  invalidates the pair at most providers. `StorageInterface` has no
+  enumeration, so an entry belonging to a different subject still cannot be
+  located; `docs/OAUTH2.md` now says so and points at `invalidate()`.
+
+- **Tokens shorter-lived than the expiry buffer were cached already expired.**
+  `toTokenData()` subtracted the buffer from the provider's expiry with no
+  floor, so a token issued with `expires_in` below the buffer — the default is
+  30 seconds — produced a timestamp in the past. The token worked, but
+  `hasExpired()` was true from the first read, so every call re-requested one
+  and caching was silently off for exactly the tokens that most need it. The
+  buffer is now capped at the token's own lifetime, leaving at least one second
+  of usable window, and never pushes expiry past what the provider reported.
+
+- **`expiryBuffer()` accepted negative values, inverting the buffer into an
+  extension.** With `expiryBuffer(-600)` and a token issued for 60 seconds, the
+  client treated it as valid for 600 seconds after the provider had expired it.
+  A negative buffer is a configuration error rather than a mode of operation,
+  so it now throws `InvalidArgumentException` and leaves the buffer unchanged.
+  Zero remains valid and still means no buffer.
+
 ## [2.4.0] - 2026-09-07
 
 ### Changed
