@@ -10,6 +10,15 @@ fact, so they summarise each release rather than list every change.
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-09-07
+
+### Added
+
+- **`onScopeChanged(?string $was, ?string $now)` on `OAuth2`.** Fires when a
+  refresh returns a narrower scope than was originally granted — see below.
+- **`Simsoft\HttpClient\Exceptions\ScopeEscalationException`.** Raised when a
+  refresh returns a *wider* scope than was originally granted.
+
 ### Fixed
 
 - **A refresh that returned a different scope was accepted without question.**
@@ -45,10 +54,8 @@ fact, so they summarise each release rather than list every change.
   never affected: they are built from the *requested* scope, so two callers
   asking for different scopes have always had separate entries.
 
-### Added
-
-- `onScopeChanged()` on `OAuth2`, described above.
-- `Simsoft\HttpClient\Exceptions\ScopeEscalationException`.
+  Existing callers are unaffected unless their provider widens scope on
+  refresh, which was already a violation on the provider's side.
 
 ## [2.4.1] - 2026-09-07
 
@@ -640,7 +647,8 @@ fact, so they summarise each release rather than list every change.
 
 Initial release.
 
-[Unreleased]: https://github.com/sim-soft/http-client/compare/2.4.1...HEAD
+[Unreleased]: https://github.com/sim-soft/http-client/compare/2.5.0...HEAD
+[2.5.0]: https://github.com/sim-soft/http-client/compare/2.4.1...2.5.0
 [2.4.1]: https://github.com/sim-soft/http-client/compare/2.4.0...2.4.1
 [2.4.0]: https://github.com/sim-soft/http-client/compare/2.3.0...2.4.0
 [2.3.0]: https://github.com/sim-soft/http-client/compare/2.2.4...2.3.0
