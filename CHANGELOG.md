@@ -10,6 +10,8 @@ fact, so they summarise each release rather than list every change.
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-09-08
+
 ### Removed
 
 - **`Simsoft\HttpClient\Clients\SimpleOAuth2`.** The class extended
@@ -27,6 +29,24 @@ fact, so they summarise each release rather than list every change.
   `Simsoft\HttpClient\Clients\Responses\SimpleOAuth2Response` is unaffected and
   remains available — it extends `Response` and never depended on the removed
   class.
+
+### Fixed
+
+- **A temporary file's path was passed to cURL unchecked.** `attach()` with a
+  raw string writes to a temp file and reads its path back from
+  `stream_get_meta_data()`, which does not guarantee a `uri` for every stream
+  type. The resource path already checked this; the raw-string path did not,
+  and would have handed cURL an empty filename. It now reports the same
+  failure as the surrounding code.
+
+### Changed
+
+- **Development requirement raised to `phpstan/phpstan ^2`** (from `^1`).
+  This affects contributors only — it is a `require-dev` entry and reaches no
+  consumer. Static analysis is now clean at level 8 across both `src` and
+  `tests`, with no baseline. The upgrade is what surfaced the `SimpleOAuth2`
+  defect above: 1.x did not check constructor compatibility against
+  `@phpstan-consistent-constructor`, and 2.x does.
 
 ## [2.5.0] - 2026-09-07
 
@@ -665,7 +685,8 @@ fact, so they summarise each release rather than list every change.
 
 Initial release.
 
-[Unreleased]: https://github.com/sim-soft/http-client/compare/2.5.0...HEAD
+[Unreleased]: https://github.com/sim-soft/http-client/compare/3.0.0...HEAD
+[3.0.0]: https://github.com/sim-soft/http-client/compare/2.5.0...3.0.0
 [2.5.0]: https://github.com/sim-soft/http-client/compare/2.4.1...2.5.0
 [2.4.1]: https://github.com/sim-soft/http-client/compare/2.4.0...2.4.1
 [2.4.0]: https://github.com/sim-soft/http-client/compare/2.3.0...2.4.0
