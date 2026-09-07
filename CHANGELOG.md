@@ -10,6 +10,8 @@ fact, so they summarise each release rather than list every change.
 
 ## [Unreleased]
 
+## [2.4.1] - 2026-09-07
+
 ### Fixed
 
 - **`revokeToken()` evicted the cache entry for whichever subject the client
@@ -39,6 +41,34 @@ fact, so they summarise each release rather than list every change.
   A negative buffer is a configuration error rather than a mode of operation,
   so it now throws `InvalidArgumentException` and leaves the buffer unchanged.
   Zero remains valid and still means no buffer.
+
+### Security
+
+- **The six vulnerabilities fixed in 2.3.0 now have published advisories.** The
+  fixes shipped on 2026-09-06 but were only described here, so `composer audit`
+  reported nothing and an installation pinned below 2.3.0 gave its operator no
+  signal. GHSA-8h2v-4qj5-vgqc (High, CVSS 8.1) covers OAuth2 tokens being shared
+  between users of the same application; GHSA-757q-r7r7-xcq5, privilege
+  substitution after a user's token expires; GHSA-7227-w5mp-vq94, bearer tokens
+  disclosed to third-party hosts through PSR-18; GHSA-xcwj-p779-5r4c, header
+  injection; GHSA-x6m6-wjx4-v49v, OAuth2 token files readable by other local
+  users; and GHSA-wjpm-p27f-99wc, OAuth2 CSRF state replay. All are fixed in
+  2.3.0 and none is a new issue in this release. Nothing in the library changed;
+  what changed is that a tool can now tell you when you are running an affected
+  version.
+
+### Documentation
+
+- **The documentation site shows the version it describes.** The site named no
+  release anywhere, so a reader had no way to tell whether what they were
+  reading matched the version they had installed. The badge sits under the
+  sidebar title and links to the release it names. It reads the number at
+  runtime from the GitHub releases API rather than hard-coding it, so the site
+  cannot drift out of date on the next tag, and stays hidden when that call
+  does not return — offline, rate-limited or blocked leaves the sidebar exactly
+  as it was. The same commit removed "zero-dependency" from four metadata
+  strings in `docs/index.html`, which the 2.4.0 passes over that claim had
+  missed by grepping only `*.md` and `*.json`.
 
 ## [2.4.0] - 2026-09-07
 
@@ -570,7 +600,8 @@ fact, so they summarise each release rather than list every change.
 
 Initial release.
 
-[Unreleased]: https://github.com/sim-soft/http-client/compare/2.4.0...HEAD
+[Unreleased]: https://github.com/sim-soft/http-client/compare/2.4.1...HEAD
+[2.4.1]: https://github.com/sim-soft/http-client/compare/2.4.0...2.4.1
 [2.4.0]: https://github.com/sim-soft/http-client/compare/2.3.0...2.4.0
 [2.3.0]: https://github.com/sim-soft/http-client/compare/2.2.4...2.3.0
 [2.2.4]: https://github.com/sim-soft/http-client/compare/2.2.3...2.2.4

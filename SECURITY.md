@@ -4,17 +4,19 @@
 
 | Version | Supported |
 | ------- | --------- |
-| 2.3.x   | Yes       |
-| 2.0–2.2 | No        |
+| 2.4.x   | Yes       |
+| 2.0–2.3 | No        |
 | 1.x     | No        |
 
-Security fixes are released for the latest 2.3.x patch line only. Upgrade to
+Security fixes are released for the latest 2.4.x patch line only. Upgrade to
 the current release before reporting an issue against an older version.
 
-2.3.0 fixes several security issues present in every earlier release, including
-header injection and OAuth2 token disclosure between users on a shared storage
-backend. See the [changelog](CHANGELOG.md) for details. Earlier lines will not
-receive backports, so upgrading is the only remedy.
+Every release below 2.3.0 is affected by at least one published advisory,
+including header injection and OAuth2 token disclosure between users on a
+shared storage backend. The six are listed on the
+[advisories page](https://github.com/sim-soft/http-client/security/advisories)
+with their affected ranges, and described in the [changelog](CHANGELOG.md).
+Earlier lines will not receive backports, so upgrading is the only remedy.
 
 ## Reporting a Vulnerability
 
