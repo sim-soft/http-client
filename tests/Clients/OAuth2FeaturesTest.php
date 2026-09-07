@@ -14,6 +14,7 @@ use RuntimeException;
 use Simsoft\HttpClient\Clients\OAuth2;
 use Simsoft\HttpClient\Clients\Responses\OAuth2TokenResponse;
 use Simsoft\HttpClient\Clients\TokenData;
+use Simsoft\HttpClient\Exceptions\ScopeEscalationException;
 use Simsoft\HttpClient\HttpClient;
 use Simsoft\HttpClient\Interfaces\StorageInterface;
 use Simsoft\HttpClient\Testing\FakeHttpClient;
@@ -173,6 +174,46 @@ class FeatureTestOAuth2WithAuthEndpoint extends FeatureTestOAuth2
 
     /** @var string Redirect URI. */
     protected string $redirectUri = 'https://myapp.com/callback';
+}
+
+/**
+ * FeatureTestOAuth2ScopeSequence class.
+ *
+ * Subclass whose fake provider grants a different scope on each call, so the
+ * scope a refresh returns can be made to differ from the one it replaces.
+ * A null entry omits the `scope` member from the response entirely, which
+ * RFC 6749 §5.1 defines as meaning the grant is unchanged.
+ */
+class FeatureTestOAuth2ScopeSequence extends FeatureTestOAuth2
+{
+    /** @var array<int, string|null> Scope granted per call, in order. */
+    public array $grantSequence = [];
+
+    /**
+     * Return a token whose scope comes from the configured sequence.
+     *
+     * @param array<string, string> $params Form parameters.
+     * @return OAuth2TokenResponse
+     */
+    protected function buildTokenRequest(array $params): OAuth2TokenResponse
+    {
+        $this->capturedParams[] = $params;
+        $granted = $this->grantSequence[$this->requestCount] ?? null;
+        $this->requestCount++;
+
+        $body = [
+            'access_token' => 'test-token-' . $this->requestCount,
+            'token_type' => 'Bearer',
+            'expires_in' => 3600,
+            'refresh_token' => 'test-refresh-' . $this->requestCount,
+        ];
+
+        if ($granted !== null) {
+            $body['scope'] = $granted;
+        }
+
+        return self::createTokenResponse(200, $body);
+    }
 }
 
 /**
@@ -924,5 +965,252 @@ class OAuth2FeaturesTest extends TestCase
         $second = $storage->get($client->exposedStorageKey('pkce_verifier'));
 
         $this->assertNotSame($first, $second);
+    }
+
+    // ---------------------------------------------------------------
+    // Scope reconciliation across a refresh
+    // ---------------------------------------------------------------
+
+    /**
+     * Acquire a token, then force it to expire so the next call refreshes.
+     *
+     * @param array<int, string|null> $grantSequence Scope granted per call.
+     * @param string|null $requestedScope Scope the client asks for.
+     * @return array{0: FeatureTestOAuth2ScopeSequence, 1: InMemoryStorage, 2: TokenData}
+     */
+    private function createRefreshScenario(array $grantSequence, ?string $requestedScope): array
+    {
+        $storage = new InMemoryStorage();
+        $client = new FeatureTestOAuth2ScopeSequence(
+            $this->clientId,
+            $this->clientSecret,
+            $storage,
+        );
+        $client->grantSequence = $grantSequence;
+        $client->withScope($requestedScope);
+
+        /** @var TokenData $first */
+        $first = $client->getTokenData();
+
+        // Put the token back expired; the next resolve goes through refresh.
+        $storage->set($client->exposedStorageKey(), new TokenData(
+            accessToken: $first->accessToken,
+            expiresAt: time() - 10,
+            refreshToken: $first->refreshToken,
+            tokenType: $first->tokenType,
+            scope: $first->scope,
+            metadata: $first->metadata,
+        ));
+
+        return [$client, $storage, $first];
+    }
+
+    #[Test]
+    public function narrowedRefreshKeepsTheTokenAndFiresOnScopeChanged(): void
+    {
+        [$client] = $this->createRefreshScenario(['read write', 'read'], 'read write');
+
+        $observed = [];
+        $client->onScopeChanged(function (?string $was, ?string $now) use (&$observed): void {
+            $observed[] = [$was, $now];
+        });
+
+        $refreshed = $client->getTokenData();
+
+        $this->assertNotNull($refreshed, 'A narrowed refresh still yields a usable token.');
+        $this->assertSame('read', $refreshed->scope);
+        $this->assertSame('test-token-2', $refreshed->accessToken);
+        $this->assertSame([['read write', 'read']], $observed);
+    }
+
+    #[Test]
+    public function narrowedRefreshSucceedsWithNoCallbackRegistered(): void
+    {
+        [$client] = $this->createRefreshScenario(['read write', 'read'], 'read write');
+
+        $refreshed = $client->getTokenData();
+
+        $this->assertNotNull($refreshed);
+        $this->assertSame('read', $refreshed->scope);
+    }
+
+    #[Test]
+    public function narrowedRefreshPersistsTheNarrowedScope(): void
+    {
+        [$client, $storage] = $this->createRefreshScenario(['read write', 'read'], 'read write');
+
+        $client->getTokenData();
+
+        $cached = $storage->get($client->exposedStorageKey());
+
+        $this->assertInstanceOf(TokenData::class, $cached);
+        $this->assertSame('read', $cached->scope, 'The cache must reflect what was actually granted.');
+    }
+
+    #[Test]
+    public function widenedRefreshRaisesScopeEscalationException(): void
+    {
+        [$client] = $this->createRefreshScenario(['read', 'read write admin'], 'read');
+
+        $captured = null;
+        $client->onTokenFailed(function (Throwable $throwable) use (&$captured): void {
+            $captured = $throwable;
+        });
+
+        $result = $client->getTokenData();
+
+        $this->assertNull($result, 'A grant the provider never made must not reach the caller.');
+        $this->assertInstanceOf(ScopeEscalationException::class, $captured);
+    }
+
+    #[Test]
+    public function widenedRefreshNamesTheScopeItGained(): void
+    {
+        [$client] = $this->createRefreshScenario(['read', 'read write admin'], 'read');
+
+        $captured = null;
+        $client->onTokenFailed(function (Throwable $throwable) use (&$captured): void {
+            $captured = $throwable;
+        });
+
+        $client->getTokenData();
+
+        $this->assertInstanceOf(ScopeEscalationException::class, $captured);
+        $this->assertStringContainsString('exceeds', $captured->getMessage());
+        $this->assertStringContainsString('write admin', $captured->getMessage());
+    }
+
+    #[Test]
+    public function widenedRefreshDoesNotFireOnScopeChanged(): void
+    {
+        [$client] = $this->createRefreshScenario(['read', 'read write admin'], 'read');
+
+        $observed = [];
+        $client->onScopeChanged(function (?string $was, ?string $now) use (&$observed): void {
+            $observed[] = [$was, $now];
+        });
+
+        $client->getTokenData();
+
+        $this->assertSame([], $observed, 'Escalation is a failure, not a reported change.');
+    }
+
+    #[Test]
+    public function widenedRefreshIsNotSwallowedByTheRefreshFallback(): void
+    {
+        // A third grant is available: if the fallback caught the escalation it
+        // would acquire a token by client_credentials and return it.
+        [$client] = $this->createRefreshScenario(
+            ['read', 'read write admin', 'read'],
+            'read'
+        );
+
+        $result = $client->getTokenData();
+
+        $this->assertNull($result);
+        $this->assertSame(2, $client->requestCount, 'No fallback acquisition may follow an escalation.');
+    }
+
+    #[Test]
+    public function omittedScopeOnRefreshCarriesTheOriginalAcross(): void
+    {
+        // RFC 6749 §5.1: a scope omitted on refresh is identical to the original.
+        [$client] = $this->createRefreshScenario(['read write', null], 'read write');
+
+        $refreshed = $client->getTokenData();
+
+        $this->assertNotNull($refreshed);
+        $this->assertSame('read write', $refreshed->scope, 'An omitted scope must not erase what is held.');
+    }
+
+    #[Test]
+    public function omittedScopeOnRefreshDoesNotFireOnScopeChanged(): void
+    {
+        [$client] = $this->createRefreshScenario(['read write', null], 'read write');
+
+        $observed = [];
+        $client->onScopeChanged(function (?string $was, ?string $now) use (&$observed): void {
+            $observed[] = [$was, $now];
+        });
+
+        $client->getTokenData();
+
+        $this->assertSame([], $observed, 'Nothing changed, so nothing is reported.');
+    }
+
+    #[Test]
+    public function unchangedScopeDoesNotFireOnScopeChanged(): void
+    {
+        [$client] = $this->createRefreshScenario(['read write', 'read write'], 'read write');
+
+        $observed = [];
+        $client->onScopeChanged(function (?string $was, ?string $now) use (&$observed): void {
+            $observed[] = [$was, $now];
+        });
+
+        $refreshed = $client->getTokenData();
+
+        $this->assertSame('read write', $refreshed?->scope);
+        $this->assertSame([], $observed);
+    }
+
+    #[Test]
+    public function reorderedScopeIsNotTreatedAsAChange(): void
+    {
+        // RFC 6749 §3.3: scope is a space-delimited list whose order is not significant.
+        [$client] = $this->createRefreshScenario(['read write', 'write read'], 'read write');
+
+        $observed = [];
+        $client->onScopeChanged(function (?string $was, ?string $now) use (&$observed): void {
+            $observed[] = [$was, $now];
+        });
+
+        $refreshed = $client->getTokenData();
+
+        $this->assertNotNull($refreshed, 'A reorder is neither a narrowing nor an escalation.');
+        $this->assertSame([], $observed);
+    }
+
+    #[Test]
+    public function repeatedWhitespaceIsNotTreatedAsAChange(): void
+    {
+        [$client] = $this->createRefreshScenario(['read write', "read   write"], 'read write');
+
+        $observed = [];
+        $client->onScopeChanged(function (?string $was, ?string $now) use (&$observed): void {
+            $observed[] = [$was, $now];
+        });
+
+        $refreshed = $client->getTokenData();
+
+        $this->assertNotNull($refreshed);
+        $this->assertSame([], $observed);
+    }
+
+    #[Test]
+    public function refreshWithNoPriorScopeAcceptsWhateverIsReturned(): void
+    {
+        // Nothing was recorded originally, so there is no baseline to judge against.
+        [$client] = $this->createRefreshScenario([null, 'read write'], null);
+
+        $observed = [];
+        $client->onScopeChanged(function (?string $was, ?string $now) use (&$observed): void {
+            $observed[] = [$was, $now];
+        });
+
+        $refreshed = $client->getTokenData();
+
+        $this->assertNotNull($refreshed);
+        $this->assertSame('read write', $refreshed->scope);
+        $this->assertSame([], $observed);
+    }
+
+    #[Test]
+    public function onScopeChangedReturnsTheClientForChaining(): void
+    {
+        [$client] = $this->createInstance();
+
+        $this->assertSame($client, $client->onScopeChanged(function (): void {
+        }));
     }
 }
