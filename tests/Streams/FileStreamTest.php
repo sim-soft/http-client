@@ -24,10 +24,15 @@ class FileStreamTest extends TestCase
      */
     protected function setUp(): void
     {
-        $this->tempFile = tempnam(sys_get_temp_dir(), 'filestream_test_');
-        if ($this->tempFile === false) {
+        // Checked before assignment, not after: $tempFile is a typed string
+        // property, so assigning false would raise TypeError on the line above
+        // the guard and never reach it.
+        $tempFile = tempnam(sys_get_temp_dir(), 'filestream_test_');
+        if ($tempFile === false) {
             $this->fail('Unable to create temp file');
         }
+
+        $this->tempFile = $tempFile;
         file_put_contents($this->tempFile, 'hello world');
     }
 

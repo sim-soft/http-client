@@ -43,8 +43,8 @@ class MacroableHost
  * Tests for the Macroable trait: macro registration, mixin functionality,
  * $this binding, and undefined macro handling.
  *
- * @SuppressWarnings(PHPMD.StaticAccess)
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
+ * @SuppressWarnings("PHPMD.StaticAccess")
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
  */
 class MacroableTraitTest extends TestCase
 {
@@ -70,6 +70,30 @@ class MacroableTraitTest extends TestCase
     protected function tearDown(): void
     {
         $this->clearMacros();
+    }
+
+    /**
+     * Build a macro closure that reads the host's label.
+     *
+     * Defined in a static method rather than inline in the test body so the
+     * closure captures no $this: Closure::bind() cannot unbind one that already
+     * has a receiver, and binding it inline returned null, which made macro()
+     * die with a TypeError. The closure itself must stay non-static, since
+     * __call() rebinds it to the host and an instance cannot be bound to a
+     * static closure either. Scoping it to MacroableHost says what the previous
+     * /** @var MacroableHost $this *\/ asserted, in a form that is checked.
+     *
+     * @return Closure(): string
+     */
+    public static function hostLabelReader(): Closure
+    {
+        return Closure::bind(
+            function (): string {
+                return $this->label;
+            },
+            null,
+            MacroableHost::class
+        );
     }
 
     /**
@@ -198,10 +222,7 @@ class MacroableTraitTest extends TestCase
     {
         $this->host->label = 'custom-label';
 
-        MacroableHost::macro('getLabel', function (): string {
-            /** @var MacroableHost $this */
-            return $this->label;
-        });
+        MacroableHost::macro('getLabel', $this->hostLabelReader());
 
         $result = $this->host->getLabel();
 
@@ -345,10 +366,7 @@ class MacroableTraitTest extends TestCase
              */
             public function readLabel(): Closure
             {
-                return function (): string {
-                    /** @var MacroableHost $this */
-                    return $this->label;
-                };
+                return MacroableTraitTest::hostLabelReader();
             }
         };
 
