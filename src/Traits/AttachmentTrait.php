@@ -236,8 +236,15 @@ trait AttachmentTrait
         $tmp = $this->createTempFile();
         fwrite($tmp, $file);
 
-        /** @var array{uri: string} $meta */
+        // stream_get_meta_data() does not guarantee uri for every stream type,
+        // and CURLFile needs a real path. A tmpfile() stream always has one, so
+        // this reports the same failure createTempFile() would rather than
+        // handing cURL an empty filename.
         $meta = stream_get_meta_data($tmp);
+        if (!isset($meta['uri'])) {
+            throw new RuntimeException('Unable to determine the path of the temporary file for an attachment.');
+        }
+
         $this->tmpFiles[] = $tmp;
 
         return new CURLFile(

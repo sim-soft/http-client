@@ -16,7 +16,7 @@ use Simsoft\HttpClient\Response;
  * Unit tests for the HttpPoolResult value object covering empty results,
  * successful/failed partitioning, index access, and count behavior.
  *
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
  */
 class HttpPoolResultTest extends TestCase
 {

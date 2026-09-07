@@ -182,7 +182,7 @@ class FileStream extends Stream
      * @param string $string
      * @return int
      * @throws RuntimeException Always — this stream is read-only.
-     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+     * @SuppressWarnings("PHPMD.UnusedFormalParameter")
      */
     public function write(string $string): int
     {

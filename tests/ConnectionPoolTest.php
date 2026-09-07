@@ -18,7 +18,7 @@ use Simsoft\HttpClient\HttpClient;
  * Tests connection pooling behavior: handle reuse via curl_reset(),
  * buildHandle() public method, destructor cleanup, and backward compatibility.
  *
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
  */
 class ConnectionPoolTest extends TestCase
 {

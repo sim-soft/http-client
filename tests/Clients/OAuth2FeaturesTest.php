@@ -26,7 +26,7 @@ use Throwable;
  * Concrete test subclass for testing OAuth2 features:
  * getHttpClient, revocation, introspection, invalidation, callbacks, and expiry buffer.
  *
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
  */
 class FeatureTestOAuth2 extends OAuth2
 {
@@ -222,9 +222,9 @@ class FeatureTestOAuth2ScopeSequence extends FeatureTestOAuth2
  * Tests for OAuth2 improvements: getHttpClient, token revocation,
  * token introspection, cache invalidation, event callbacks, and configurable expiry buffer.
  *
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
- * @SuppressWarnings(PHPMD.TooManyMethods)
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
+ * @SuppressWarnings("PHPMD.TooManyMethods")
  */
 class OAuth2FeaturesTest extends TestCase
 {

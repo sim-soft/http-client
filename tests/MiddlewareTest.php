@@ -15,7 +15,7 @@ use Simsoft\HttpClient\Response;
  * Testable HttpClient subclass that overrides getCoreHandler()
  * to return a simple Response without making real HTTP calls.
  *
- * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+ * @SuppressWarnings("PHPMD.UnusedFormalParameter")
  */
 class TestableHttpClient extends HttpClient
 {
@@ -46,8 +46,8 @@ class TestableHttpClient extends HttpClient
  * Tests the HttpClient middleware pipeline: execution order,
  * response modification, short-circuit behavior, and error handling.
  *
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
- * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
+ * @SuppressWarnings("PHPMD.UnusedFormalParameter")
  */
 class MiddlewareTest extends TestCase
 {

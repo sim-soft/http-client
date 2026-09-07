@@ -19,10 +19,10 @@ use Simsoft\HttpClient\Testing\UnexpectedRequestException;
  * matching, response configuration, request recording, assertion methods,
  * and response sequencing behavior.
  *
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
- * @SuppressWarnings(PHPMD.TooManyMethods)
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
- * @SuppressWarnings(PHPMD.StaticAccess)
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
+ * @SuppressWarnings("PHPMD.TooManyMethods")
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
+ * @SuppressWarnings("PHPMD.StaticAccess")
  */
 class FakeHttpClientTest extends TestCase
 {
@@ -204,9 +204,13 @@ class FakeHttpClientTest extends TestCase
     {
         $client = FakeHttpClient::fake();
 
-        $client->assertNothingSent();
+        // assertNothingSent() throws AssertionFailedError rather than going
+        // through PHPUnit's counter, so reaching the next line is the pass
+        // condition. Declared, rather than padded with assertTrue(true), which
+        // asserts nothing about the code under test.
+        $this->expectNotToPerformAssertions();
 
-        $this->assertTrue(true);
+        $client->assertNothingSent();
     }
 
     /**
@@ -287,9 +291,10 @@ class FakeHttpClientTest extends TestCase
 
         $client->get('https://api.example.com/users');
 
-        $client->assertSent('GET', 'https://api.example.com/users');
+        // assertSent() throws on failure; reaching the end is the pass.
+        $this->expectNotToPerformAssertions();
 
-        $this->assertTrue(true);
+        $client->assertSent('GET', 'https://api.example.com/users');
     }
 
     /**
@@ -305,9 +310,10 @@ class FakeHttpClientTest extends TestCase
         $client->get('https://api.example.com/users');
         $client->get('https://api.example.com/users');
 
-        $client->assertSentCount(2);
+        // assertSentCount() throws on failure; reaching the end is the pass.
+        $this->expectNotToPerformAssertions();
 
-        $this->assertTrue(true);
+        $client->assertSentCount(2);
     }
 
     // ── Response from array config tests ─────────────────────────────

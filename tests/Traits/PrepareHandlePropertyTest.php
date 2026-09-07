@@ -22,7 +22,7 @@ use Simsoft\HttpClient\HttpClient;
  *
  * Feature: phpmd-compliance-fixes, Property 2: Request preparation produces correct cURL configuration
  *
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
  */
 class PrepareHandlePropertyTest extends TestCase
 {

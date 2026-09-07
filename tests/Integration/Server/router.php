@@ -49,7 +49,7 @@ $readHeaders = static function (): array {
 /**
  * Emit a JSON body with an explicit content type.
  *
- * @var Closure(array<string, mixed>, int=): void $sendJson
+ * @param array<string, mixed> $payload
  */
 $sendJson = static function (array $payload, int $status = 200): void {
     http_response_code($status);

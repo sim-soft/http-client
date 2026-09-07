@@ -40,7 +40,7 @@ class SinkHost
  * Tests for the SinkTrait: sink() file-based mode, sinkStream() stream-based mode,
  * and destination validation.
  *
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
  */
 class SinkTraitTest extends TestCase
 {

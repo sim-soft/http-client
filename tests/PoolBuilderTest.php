@@ -16,7 +16,7 @@ use Simsoft\HttpClient\PoolBuilder;
  * Tests for the PoolBuilder class: shared configuration, HTTP method builders,
  * JSON mode, and query parameter handling.
  *
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
  */
 class PoolBuilderTest extends TestCase
 {

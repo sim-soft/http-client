@@ -129,7 +129,7 @@ class HttpPoolResult implements Countable, ArrayAccess, IteratorAggregate
      *
      * @throws RuntimeException Always thrown — a result is read-only.
      *
-     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+     * @SuppressWarnings("PHPMD.UnusedFormalParameter")
      */
     public function offsetSet(mixed $offset, mixed $value): void
     {
@@ -143,7 +143,7 @@ class HttpPoolResult implements Countable, ArrayAccess, IteratorAggregate
      *
      * @throws RuntimeException Always thrown — a result is read-only.
      *
-     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+     * @SuppressWarnings("PHPMD.UnusedFormalParameter")
      */
     public function offsetUnset(mixed $offset): void
     {

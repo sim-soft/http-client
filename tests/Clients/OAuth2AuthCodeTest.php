@@ -18,7 +18,7 @@ use Simsoft\HttpClient\Clients\TokenData;
  * Configures authorize endpoint, sandbox auth endpoint, redirect URI,
  * and overrides buildTokenRequest() to capture params and return mock responses.
  *
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
  */
 class AuthCodeTestOAuth2 extends OAuth2
 {
@@ -113,8 +113,8 @@ class AuthCodeTestOAuth2NoEndpoint extends AuthCodeTestOAuth2
  * Tests cover URL generation, state/PKCE validation, code exchange,
  * error handling, and backward compatibility with client_credentials.
  *
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
  */
 class OAuth2AuthCodeTest extends TestCase
 {

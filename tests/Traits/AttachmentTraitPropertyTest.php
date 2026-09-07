@@ -22,7 +22,7 @@ use Simsoft\HttpClient\HttpClient;
  *
  * Feature: phpmd-compliance-fixes, Property 1: Attachment normalization preserves file content
  *
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
  */
 class AttachmentTraitPropertyTest extends TestCase
 {

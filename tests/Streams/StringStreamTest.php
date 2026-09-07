@@ -17,8 +17,8 @@ use Simsoft\HttpClient\Streams\StringStream;
  *
  * Tests for StringStream construction, read, write, seek, close, eof, getSize, and __toString.
  *
- * @SuppressWarnings(PHPMD.TooManyMethods)
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
+ * @SuppressWarnings("PHPMD.TooManyMethods")
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
  */
 class StringStreamTest extends TestCase
 {
@@ -396,7 +396,7 @@ class StringStreamTest extends TestCase
      *
      * Validates: Requirements 1.10
      *
-     * @SuppressWarnings(PHPMD.StaticAccess)
+     * @SuppressWarnings("PHPMD.StaticAccess")
      */
     #[Test]
     public function writeReadRoundTripProperty(): void
@@ -422,7 +422,7 @@ class StringStreamTest extends TestCase
      *
      * Validates: Requirements 1.2
      *
-     * @SuppressWarnings(PHPMD.StaticAccess)
+     * @SuppressWarnings("PHPMD.StaticAccess")
      */
     #[Test]
     public function readReturnsCorrectSubstringProperty(): void

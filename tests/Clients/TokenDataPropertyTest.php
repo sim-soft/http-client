@@ -21,7 +21,7 @@ use Simsoft\HttpClient\Clients\TokenData;
  * Feature: standalone-oauth2, Property 1: TokenData serialization round-trip
  * Feature: standalone-oauth2, Property 2: Token expiry detection correctness
  *
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
  */
 class TokenDataPropertyTest extends TestCase
 {

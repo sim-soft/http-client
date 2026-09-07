@@ -31,7 +31,7 @@ use Throwable;
  *
  *   $token = MyApiOAuth2::request('client-id', 'client-secret')->getAccessToken();
  *
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects) Coupling is inherent to OAuth2 lifecycle management.
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects") Coupling is inherent to OAuth2 lifecycle management.
  */
 abstract class OAuth2
 {

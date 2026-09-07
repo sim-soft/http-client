@@ -27,8 +27,8 @@ use Simsoft\HttpClient\Testing\FakeHttpClient;
  * Feature: http-pool-and-testing, Property 4: Pool Failure Isolation
  * Feature: http-pool-and-testing, Property 6: Pool Callback Invocation
  *
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
  */
 class HttpPoolPropertyTest extends TestCase
 {
@@ -79,12 +79,9 @@ class HttpPoolPropertyTest extends TestCase
 
         $requests = $this->buildMixedRequests($batchSize);
 
+        // send() declares HttpPoolResult, so the type needs no check here — what
+        // this property verifies is the count and indexing below.
         $result = $pool->send($requests);
-
-        // The result must be an HttpPoolResult instance
-        if (!$result instanceof HttpPoolResult) {
-            return false;
-        }
 
         // count() must equal the batch size
         if ($result->count() !== $batchSize) {
@@ -98,14 +95,10 @@ class HttpPoolPropertyTest extends TestCase
             return false;
         }
 
-        // Every index from 0 to N-1 must be present
+        // Every index from 0 to N-1 must be present. The entries are typed
+        // Response by getResponses(), so presence is the property under test.
         for ($idx = 0; $idx < $batchSize; $idx++) {
             if (!array_key_exists($idx, $responses)) {
-                return false;
-            }
-
-            // Each entry must be a Response instance
-            if (!$responses[$idx] instanceof Response) {
                 return false;
             }
         }
@@ -228,10 +221,6 @@ class HttpPoolPropertyTest extends TestCase
             }
 
             $response = $responses[$idx];
-
-            if (!$response instanceof Response) {
-                return false;
-            }
 
             // The response body must match the unique identifier for this index
             if ($response->body() !== $expectedBodies[$idx]) {
@@ -442,10 +431,6 @@ class HttpPoolPropertyTest extends TestCase
             }
 
             $response = $responses[$idx];
-
-            if (!$response instanceof Response) {
-                return false;
-            }
 
             // Verify success/failure matches expectation
             if (in_array($idx, $failurePositions, true)) {

@@ -14,9 +14,9 @@ use Simsoft\HttpClient\HttpClient;
  * parsed back. The unit suite verifies that the right cURL options are set;
  * these verify that setting them produces the intended result.
  *
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
- * @SuppressWarnings(PHPMD.StaticAccess)
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
+ * @SuppressWarnings("PHPMD.StaticAccess")
  */
 class HttpTransferTest extends IntegrationTestCase
 {

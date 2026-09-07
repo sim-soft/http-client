@@ -16,7 +16,7 @@ use Simsoft\HttpClient\HttpClient;
  * Tests for the DeprecatedTrait: verifies that each deprecated method
  * triggers an E_USER_DEPRECATED notice before delegating to its replacement.
  *
- * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+ * @SuppressWarnings("PHPMD.UnusedFormalParameter")
  */
 class DeprecatedTraitTest extends TestCase
 {

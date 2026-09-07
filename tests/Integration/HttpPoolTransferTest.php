@@ -21,9 +21,9 @@ use Simsoft\HttpClient\HttpPool;
  * request completing, keyed to the right response — rather than on wall-clock
  * overlap, which would fail on Windows for reasons unrelated to the library.
  *
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
- * @SuppressWarnings(PHPMD.StaticAccess)
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
+ * @SuppressWarnings("PHPMD.StaticAccess")
  */
 class HttpPoolTransferTest extends IntegrationTestCase
 {

@@ -10,6 +10,24 @@ fact, so they summarise each release rather than list every change.
 
 ## [Unreleased]
 
+### Removed
+
+- **`Simsoft\HttpClient\Clients\SimpleOAuth2`.** The class extended
+  `HttpClient` while requiring a client ID and secret in its constructor, so
+  the inherited `HttpClient::make()` — which does `new static()` — could not
+  construct it and raised `ArgumentCountError` from inside the parent. That is
+  a Liskov violation, and it made the class unusable through the factory its
+  own parent advertises.
+
+  Use `Simsoft\HttpClient\Clients\OAuth2` instead. It covers the same
+  client_credentials flow and composes an `HttpClient` rather than extending
+  one, which is why it never had this problem, and it additionally supports
+  token refresh, the authorization_code grant, and scope reconciliation.
+
+  `Simsoft\HttpClient\Clients\Responses\SimpleOAuth2Response` is unaffected and
+  remains available — it extends `Response` and never depended on the removed
+  class.
+
 ## [2.5.0] - 2026-09-07
 
 ### Added

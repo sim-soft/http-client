@@ -9,7 +9,6 @@ src/
 ├── Response.php            # Response class (implements PSR-7 ResponseInterface)
 ├── Clients/                # Specialized client implementations
 │   ├── OAuth2.php          # OAuth2 client (client_credentials, authorization_code)
-│   ├── SimpleOAuth2.php    # Simplified OAuth2 client
 │   ├── TokenData.php       # Token value object
 │   ├── Helpers/
 │   │   ├── FileStorage.php
