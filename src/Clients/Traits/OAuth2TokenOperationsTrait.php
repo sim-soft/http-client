@@ -3,6 +3,7 @@
 namespace Simsoft\HttpClient\Clients\Traits;
 
 use RuntimeException;
+use Simsoft\HttpClient\Clients\TokenData;
 
 /**
  * OAuth2TokenOperationsTrait.
@@ -21,8 +22,16 @@ trait OAuth2TokenOperationsTrait
     /**
      * Revoke an access or refresh token at the provider's revocation endpoint (RFC 7009).
      *
-     * Invalidates the token on the provider side and removes the cached token
-     * from local storage.
+     * Invalidates the token on the provider side and, when the cached entry for
+     * this client actually holds that token, removes it from local storage.
+     *
+     * The cache is keyed by client, subject, endpoint and scope, so the entry a
+     * client instance points at is not necessarily the one holding the token
+     * passed here. Evicting unconditionally would drop an unrelated — and still
+     * valid — token whenever the two disagree. `StorageInterface` cannot be
+     * enumerated, so the entry holding a token belonging to a different subject
+     * cannot be located; revoke through the client bound to that subject, or
+     * call `invalidate()` on it.
      *
      * @param string $token The token string to revoke.
      * @param string $tokenTypeHint Hint: 'access_token' or 'refresh_token'.
@@ -44,11 +53,45 @@ trait OAuth2TokenOperationsTrait
             ->post($this->revocationEndpoint);
 
         if ($response->successful()) {
-            $this->storage->remove($this->storageKey());
+            $this->evictIfCachedTokenMatches($token);
             return true;
         }
 
         return false;
+    }
+
+    /**
+     * Remove this client's cached entry when it carries the revoked token.
+     *
+     * Both the access token and the refresh token are compared: revoking a
+     * refresh token invalidates the pair at most providers, so the cached
+     * access token is no longer renewable and must not be kept.
+     *
+     * @param string $token The token string that was revoked.
+     * @return void
+     */
+    private function evictIfCachedTokenMatches(string $token): void
+    {
+        $key = $this->storageKey();
+
+        if (!$this->storage->has($key)) {
+            return;
+        }
+
+        $cached = $this->storage->get($key);
+
+        if (!$cached instanceof TokenData) {
+            // Not a usable entry; drop it rather than leave it behind.
+            $this->storage->remove($key);
+            return;
+        }
+
+        if (
+            hash_equals($cached->accessToken, $token)
+            || ($cached->refreshToken !== null && hash_equals($cached->refreshToken, $token))
+        ) {
+            $this->storage->remove($key);
+        }
     }
 
     /**
