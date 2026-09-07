@@ -7,6 +7,7 @@ namespace Simsoft\HttpClient\Tests\Clients;
 require_once __DIR__ . '/OAuth2PropertyTest.php';
 
 use Closure;
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -15,6 +16,7 @@ use Simsoft\HttpClient\Clients\Responses\OAuth2TokenResponse;
 use Simsoft\HttpClient\Clients\TokenData;
 use Simsoft\HttpClient\HttpClient;
 use Simsoft\HttpClient\Interfaces\StorageInterface;
+use Simsoft\HttpClient\Testing\FakeHttpClient;
 use Throwable;
 
 /**
@@ -113,6 +115,28 @@ class FeatureTestOAuth2NoRevocation extends FeatureTestOAuth2
 {
     /** @var string Empty revocation endpoint. */
     protected string $revocationEndpoint = '';
+}
+
+/**
+ * FeatureTestOAuth2FakeRevocation class.
+ *
+ * Reports every revocation request as successful without performing HTTP, so
+ * the storage eviction that follows a successful revocation can be observed.
+ * revokeToken() itself is inherited, not overridden.
+ */
+class FeatureTestOAuth2FakeRevocation extends FeatureTestOAuth2
+{
+    /**
+     * Return a successful response without touching the network.
+     *
+     * @return HttpClient
+     */
+    public function getHttpClient(): HttpClient
+    {
+        return FakeHttpClient::fake([
+            '*' => ['status' => 200, 'body' => '{}'],
+        ]);
+    }
 }
 
 /**
@@ -270,6 +294,128 @@ class OAuth2FeaturesTest extends TestCase
         $this->assertNotNull($tokenData);
         $this->assertLessThanOrEqual(time() + 3540, $tokenData->expiresAt);
         $this->assertGreaterThan(time() + 3400, $tokenData->expiresAt);
+    }
+
+    #[Test]
+    public function expiryBufferRejectsNegativeValues(): void
+    {
+        [$client] = $this->createInstance();
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Expiry buffer must be zero or greater');
+
+        $client->expiryBuffer(-1);
+    }
+
+    #[Test]
+    public function expiryBufferLeavesTheBufferUnchangedWhenRejected(): void
+    {
+        [$client] = $this->createInstance();
+
+        try {
+            $client->expiryBuffer(-600);
+        } catch (InvalidArgumentException) {
+            // Expected.
+        }
+
+        $this->assertSame(30, $client->getExpiryBuffer());
+    }
+
+    #[Test]
+    public function expiryBufferAcceptsZero(): void
+    {
+        [$client] = $this->createInstance();
+
+        $client->expiryBuffer(0);
+
+        $this->assertSame(0, $client->getExpiryBuffer());
+    }
+
+    // ---------------------------------------------------------------
+    // Short-lived tokens (expires_in below the buffer)
+    // ---------------------------------------------------------------
+
+    #[Test]
+    public function tokenShorterThanTheBufferIsNotCachedAlreadyExpired(): void
+    {
+        [$client, $storage] = $this->createInstance();
+
+        $client->nextResponse = FeatureTestOAuth2::createTokenResponse(200, [
+            'access_token' => 'short-lived',
+            'expires_in' => 10,
+        ]);
+
+        $client->getAccessToken();
+
+        $cached = $storage->get($client->exposedStorageKey());
+
+        $this->assertInstanceOf(TokenData::class, $cached);
+        $this->assertFalse(
+            $cached->hasExpired(),
+            'A usable token was cached already expired, which silently disables caching.',
+        );
+    }
+
+    #[Test]
+    public function tokenShorterThanTheBufferIsServedFromCacheOnASecondCall(): void
+    {
+        [$client] = $this->createInstance();
+
+        $client->nextResponse = FeatureTestOAuth2::createTokenResponse(200, [
+            'access_token' => 'short-lived',
+            'expires_in' => 10,
+        ]);
+
+        $client->getAccessToken();
+        $client->getAccessToken();
+
+        $this->assertSame(
+            1,
+            $client->requestCount,
+            'The token endpoint was contacted again despite caching being enabled.',
+        );
+    }
+
+    #[Test]
+    public function tokenShorterThanTheBufferNeverOutlivesTheProviderExpiry(): void
+    {
+        [$client, $storage] = $this->createInstance();
+
+        $client->nextResponse = FeatureTestOAuth2::createTokenResponse(200, [
+            'access_token' => 'short-lived',
+            'expires_in' => 10,
+        ]);
+
+        $client->getAccessToken();
+
+        $cached = $storage->get($client->exposedStorageKey());
+
+        $this->assertInstanceOf(TokenData::class, $cached);
+        $this->assertLessThanOrEqual(
+            time() + 10,
+            $cached->expiresAt,
+            'Clamping the buffer must not push expiry past what the provider reported.',
+        );
+    }
+
+    #[Test]
+    public function expiryBufferStillAppliesWhenTheTokenIsLongerThanTheBuffer(): void
+    {
+        [$client, $storage] = $this->createInstance();
+
+        $client->expiryBuffer(30);
+        $client->nextResponse = FeatureTestOAuth2::createTokenResponse(200, [
+            'access_token' => 'normal',
+            'expires_in' => 3600,
+        ]);
+
+        $client->getAccessToken();
+
+        $cached = $storage->get($client->exposedStorageKey());
+
+        $this->assertInstanceOf(TokenData::class, $cached);
+        $this->assertLessThanOrEqual(time() + 3570, $cached->expiresAt);
+        $this->assertGreaterThan(time() + 3500, $cached->expiresAt);
     }
 
     // ---------------------------------------------------------------
@@ -478,6 +624,79 @@ class OAuth2FeaturesTest extends TestCase
         $this->assertSame('access_token', $testClient->revocationParams['token_type_hint']);
         $this->assertSame($this->clientId, $testClient->revocationParams['client_id']);
         $this->assertSame($this->clientSecret, $testClient->revocationParams['client_secret']);
+    }
+
+    #[Test]
+    public function revokeTokenEvictsOnlyTheEntryHoldingTheRevokedToken(): void
+    {
+        $storage = new InMemoryStorage();
+
+        $alice = new FeatureTestOAuth2FakeRevocation($this->clientId, $this->clientSecret, $storage);
+        $alice->forSubject('alice');
+
+        $bob = new FeatureTestOAuth2FakeRevocation($this->clientId, $this->clientSecret, $storage);
+        $bob->forSubject('bob');
+
+        $storage->set($alice->exposedStorageKey(), new TokenData('alice-token', time() + 3600));
+        $storage->set($bob->exposedStorageKey(), new TokenData('bob-token', time() + 3600));
+
+        // Alice's token is revoked at the provider, but the client instance in
+        // hand is bound to Bob. Bob's cache entry must survive.
+        $this->assertTrue($bob->revokeToken('alice-token'));
+
+        $this->assertTrue(
+            $storage->has($bob->exposedStorageKey()),
+            "Bob's valid token was evicted by a revocation of Alice's token.",
+        );
+    }
+
+    #[Test]
+    public function revokeTokenEvictsTheSubjectEntryWhenRevokedThroughItsOwnClient(): void
+    {
+        $storage = new InMemoryStorage();
+
+        $alice = new FeatureTestOAuth2FakeRevocation($this->clientId, $this->clientSecret, $storage);
+        $alice->forSubject('alice');
+
+        $bob = new FeatureTestOAuth2FakeRevocation($this->clientId, $this->clientSecret, $storage);
+        $bob->forSubject('bob');
+
+        $storage->set($alice->exposedStorageKey(), new TokenData('alice-token', time() + 3600));
+        $storage->set($bob->exposedStorageKey(), new TokenData('bob-token', time() + 3600));
+
+        $alice->revokeToken('alice-token');
+
+        $this->assertFalse($storage->has($alice->exposedStorageKey()));
+        $this->assertTrue($storage->has($bob->exposedStorageKey()));
+    }
+
+    #[Test]
+    public function revokeTokenEvictsTheCurrentEntryWhenItHoldsThatToken(): void
+    {
+        $storage = new InMemoryStorage();
+
+        $client = new FeatureTestOAuth2FakeRevocation($this->clientId, $this->clientSecret, $storage);
+        $storage->set($client->exposedStorageKey(), new TokenData('my-token', time() + 3600));
+
+        $this->assertTrue($client->revokeToken('my-token'));
+
+        $this->assertFalse($storage->has($client->exposedStorageKey()));
+    }
+
+    #[Test]
+    public function revokeTokenEvictsWhenTheRefreshTokenIsRevoked(): void
+    {
+        $storage = new InMemoryStorage();
+
+        $client = new FeatureTestOAuth2FakeRevocation($this->clientId, $this->clientSecret, $storage);
+        $storage->set(
+            $client->exposedStorageKey(),
+            new TokenData('my-access', time() + 3600, 'my-refresh'),
+        );
+
+        $this->assertTrue($client->revokeToken('my-refresh', 'refresh_token'));
+
+        $this->assertFalse($storage->has($client->exposedStorageKey()));
     }
 
     #[Test]

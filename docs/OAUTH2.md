@@ -287,6 +287,16 @@ $token = MyApiOAuth2::request('client-id', 'client-secret')
     ->getAccessToken();
 ```
 
+The buffer must be zero or greater — a negative value would extend a token past
+the expiry the provider reported, so `expiryBuffer()` throws
+`InvalidArgumentException` instead.
+
+When a provider issues a token shorter-lived than the buffer, the buffer is
+capped at that token's lifetime so at least one second of usable window
+remains. Without the cap the token would be cached already expired, and every
+call would re-request one — caching silently off for the shortest-lived tokens.
+The capped expiry is never later than the provider's own.
+
 Set as default in a subclass:
 
 ```php
@@ -722,7 +732,25 @@ $revoked = $oauth->revokeToken($tokenData->accessToken);
 $oauth->revokeToken($tokenData->refreshToken, 'refresh_token');
 ```
 
-On success, the local cached token is also removed.
+On success, the local cached entry is removed **when it holds the token that was
+revoked** — either as its access token or its refresh token.
+
+The cache is keyed by client, subject, endpoint and scope, so the entry a client
+instance points at is not always the one holding the token you passed. Revoking
+one user's token through a client bound to another user leaves the second user's
+valid token in place:
+
+```php
+// Wrong: $oauth is bound to Bob, so Bob's cached token would be the one at risk.
+$oauth->forSubject('bob')->revokeToken($alicesToken);
+
+// Right: revoke through the client bound to that subject.
+$oauth->forSubject('alice')->revokeToken($alicesToken);
+```
+
+`StorageInterface` cannot be enumerated, so a token belonging to a different
+subject cannot be located and evicted. If you revoke out-of-band, call
+`invalidate()` on a client bound to that subject to drop its cached entry.
 
 Override `buildRevocationParams()` for provider-specific needs.
 

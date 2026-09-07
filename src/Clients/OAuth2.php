@@ -3,6 +3,7 @@
 namespace Simsoft\HttpClient\Clients;
 
 use Closure;
+use InvalidArgumentException;
 use RuntimeException;
 use Simsoft\HttpClient\Clients\Helpers\FileStorage;
 use Simsoft\HttpClient\Clients\Responses\OAuth2TokenResponse;
@@ -141,11 +142,25 @@ abstract class OAuth2
     /**
      * Set the safety buffer subtracted from token expiry time.
      *
+     * The buffer only ever shortens the window a token is considered usable
+     * for. A negative value would invert it into an extension, making the
+     * client treat a token as valid after the provider had already expired it,
+     * so it is rejected here rather than silently applied.
+     *
      * @param int $seconds Buffer in seconds. 0 means no buffer.
      * @return $this
+     * @throws InvalidArgumentException When $seconds is negative.
      */
     public function expiryBuffer(int $seconds): self
     {
+        if ($seconds < 0) {
+            throw new InvalidArgumentException(sprintf(
+                'Expiry buffer must be zero or greater, %d given. '
+                . 'A negative buffer would extend a token past its expiry.',
+                $seconds
+            ));
+        }
+
         $this->expiryBuffer = $seconds;
         return $this;
     }
@@ -694,10 +709,9 @@ abstract class OAuth2
         $expiresAt = 0;
 
         if ($this->cacheEnabled) {
-            $serverExpiresAt = $response->getExpiresAt();
-            $expiresAt = $serverExpiresAt !== null
-                ? $serverExpiresAt - $this->expiryBuffer
-                : time() + 3600 - $this->expiryBuffer;
+            $expiresAt = $this->applyExpiryBuffer(
+                $response->getExpiresAt() ?? time() + 3600
+            );
         }
 
         return new TokenData(
@@ -707,5 +721,36 @@ abstract class OAuth2
             tokenType: $response->getTokenType(),
             scope: $response->getScope(),
         );
+    }
+
+    /**
+     * Subtract the safety buffer from an expiry, without expiring the token.
+     *
+     * Providers do issue tokens shorter-lived than the default 30 second
+     * buffer. Subtracting flatly there yields a timestamp already in the past,
+     * so the token is cached as expired and every later call re-requests one —
+     * caching is silently off for exactly the tokens where it matters most.
+     *
+     * The buffer is therefore capped at the token's own lifetime, leaving at
+     * least one second of usable window. The result is never pushed beyond what
+     * the provider reported, so a clamped token still expires no later than the
+     * real one.
+     *
+     * @param int $serverExpiresAt Unix timestamp the provider expires the token at.
+     * @return int Buffered expiry timestamp.
+     */
+    protected function applyExpiryBuffer(int $serverExpiresAt): int
+    {
+        $now = time();
+        $lifetime = $serverExpiresAt - $now;
+
+        if ($lifetime <= 0) {
+            // Already expired on arrival; the buffer cannot improve on that.
+            return $serverExpiresAt;
+        }
+
+        $buffer = min($this->expiryBuffer, $lifetime - 1);
+
+        return $serverExpiresAt - max($buffer, 0);
     }
 }
