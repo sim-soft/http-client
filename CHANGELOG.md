@@ -10,6 +10,46 @@ fact, so they summarise each release rather than list every change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A refresh that returned a different scope was accepted without question.**
+  A refresh is not a fresh grant, so the scope it returns only means anything
+  relative to what was already held — and nothing compared the two. Three
+  consequences, each reproduced before being fixed:
+
+  A provider is permitted to grant *less* on refresh, and did so silently. The
+  narrowed token was stored and returned like any other, so calls needing the
+  dropped permission began returning 403 with nothing connecting them to the
+  refresh, possibly hours later. The token is still kept — it is valid, and
+  refusing it would break applications whose provider routinely narrows — but
+  the reduction now fires the new `onScopeChanged(?string $was, ?string $now)`
+  callback.
+
+  A refresh returning *more* than was originally granted was also accepted,
+  which RFC 6749 §6 forbids. It now raises `ScopeEscalationException`. That
+  type is deliberately outside the refresh-failure hierarchy: the existing
+  fallback catches `Throwable` and re-acquires a token by another grant, which
+  would have obtained a working token and buried the discrepancy.
+
+  A provider that *omitted* `scope` on refresh destroyed what the client knew.
+  RFC 6749 §5.1 defines an omitted scope as identical to the original grant,
+  but it was recorded as `null`, so a client holding `read write` refreshed
+  into holding nothing. Omitting scope on refresh is ordinary provider
+  behaviour, which made this the most reachable of the three. The previous
+  value is now carried across.
+
+  Comparison is by set, per RFC 6749 §3.3: reordering and repeated whitespace
+  are not changes and stay silent. `TokenData::$scope` was and remains inert —
+  the library reads it for no decision of its own — so this is a matter of
+  reporting the grant correctly, not of privilege enforcement. Cache keys were
+  never affected: they are built from the *requested* scope, so two callers
+  asking for different scopes have always had separate entries.
+
+### Added
+
+- `onScopeChanged()` on `OAuth2`, described above.
+- `Simsoft\HttpClient\Exceptions\ScopeEscalationException`.
+
 ## [2.4.1] - 2026-09-07
 
 ### Fixed

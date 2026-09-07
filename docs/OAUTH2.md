@@ -41,19 +41,20 @@ caching, expiry detection, and automatic refresh — using only the library's ow
 
 15. [Middleware Integration](#oauth2-httpclient)
 16. [Event Callbacks](#oauth2-events)
+17. [Scope Changes on Refresh](#oauth2-scope-changes)
 
 ### Token Operations
 
-17. [Token Revocation](#oauth2-revocation)
-18. [Token Introspection](#oauth2-introspection)
+18. [Token Revocation](#oauth2-revocation)
+19. [Token Introspection](#oauth2-introspection)
 
 ### Reference
 
-19. [OAuth2TokenResponse](#oauth2-token-response)
-20. [TokenData Value Object](#oauth2-tokendata)
-21. [StorageInterface](#storage-interface)
-22. [Storage Notes](#session-storage)
-23. [Comparison with Other Libraries](#comparison)
+20. [OAuth2TokenResponse](#oauth2-token-response)
+21. [TokenData Value Object](#oauth2-tokendata)
+22. [StorageInterface](#storage-interface)
+23. [Storage Notes](#session-storage)
+24. [Comparison with Other Libraries](#comparison)
 
 ---
 
@@ -190,6 +191,10 @@ The practical consequence is that changing the scope means an extra round trip t
 the token endpoint, not a cache hit. Ask for a narrow scope in the code paths
 that need only that, and accept the one extra request — do not widen the scope
 just to share a cache entry.
+
+What you ask for is not necessarily what you get: a provider may grant less than
+was requested, on the first request or on a later refresh. See
+[Scope Changes on Refresh](#oauth2-scope-changes).
 
 ---
 
@@ -683,11 +688,12 @@ $client = HttpClient::make()
 
 Register callbacks to react to token lifecycle events:
 
-| Method               | Triggered When               | Callback Receives |
-|----------------------|------------------------------|-------------------|
-| `onTokenAcquired()`  | Fresh token acquired         | `TokenData`       |
-| `onTokenRefreshed()` | Token refreshed              | `TokenData`       |
-| `onTokenFailed()`    | Acquisition or refresh fails | `Throwable`       |
+| Method               | Triggered When               | Callback Receives            |
+|----------------------|------------------------------|------------------------------|
+| `onTokenAcquired()`  | Fresh token acquired         | `TokenData`                  |
+| `onTokenRefreshed()` | Token refreshed              | `TokenData`                  |
+| `onTokenFailed()`    | Acquisition or refresh fails | `Throwable`                  |
+| `onScopeChanged()`   | A refresh narrowed the scope | `?string $was, ?string $now` |
 
 ```php
 use Simsoft\HttpClient\Clients\TokenData;
@@ -706,6 +712,79 @@ $oauth = MyApiOAuth2::request('client-id', 'client-secret')
 
 $token = $oauth->getAccessToken();
 ```
+
+---
+
+## Scope Changes on Refresh<a id="oauth2-scope-changes"></a>
+
+A refresh is not a fresh grant. The provider may return a different scope from
+the one it granted originally, and what that means depends on the direction.
+
+### A narrowed scope is permitted, and reported
+
+RFC 6749 §6 allows a provider to grant less on refresh than it granted the first
+time. The refreshed token is still valid, so it is stored and returned as usual.
+What changes is that calls needing the dropped permission start returning 403 —
+with nothing connecting them to the refresh that caused it, possibly hours later.
+
+`onScopeChanged()` is that connection:
+
+```php
+$oauth = MyApiOAuth2::request('client-id', 'client-secret')
+    ->onScopeChanged(function (?string $was, ?string $now): void {
+        error_log("[OAuth2] Scope narrowed on refresh: {$was} -> {$now}");
+        // Re-authorise, alert an operator, or disable the affected feature.
+    });
+```
+
+It fires only on a genuine reduction. Three things are deliberately silent:
+
+- **An unchanged scope.** Nothing happened.
+- **A reordering.** RFC 6749 §3.3 defines scope as a space-delimited list whose
+  order carries no meaning, so `write read` and `read write` are the same grant.
+  Repeated whitespace is likewise ignored.
+- **An omitted scope.** See below.
+
+### An omitted scope means "unchanged"
+
+RFC 6749 §5.1 says a token response that omits `scope` describes a grant
+identical to the one requested. Many providers omit it on every refresh, so
+treating absent as "no scope" would have a client forget what it holds on an
+ordinary, entirely normal refresh. The previous scope is carried across instead,
+and no callback fires because nothing changed.
+
+### A widened scope raises
+
+A refresh may not return more than was originally granted — RFC 6749 §6 is
+explicit. There is no legitimate reading of a provider handing back authority it
+never issued, so this is not stored and not reported as a change. It raises
+`ScopeEscalationException`, which reaches you the same way any token failure
+does: `getTokenData()` returns `null` and `onTokenFailed()` receives it.
+
+```php
+use Simsoft\HttpClient\Exceptions\ScopeEscalationException;
+
+$oauth = MyApiOAuth2::request('client-id', 'client-secret')
+    ->onTokenFailed(function (Throwable $error): void {
+        if ($error instanceof ScopeEscalationException) {
+            // 'Token refresh for client "x" returned the scope "read write admin",
+            //  which exceeds the "read" originally granted by adding "write admin".'
+            alertSecurityTeam($error->getMessage());
+        }
+    });
+```
+
+`ScopeEscalationException` deliberately does not extend the exceptions raised by
+an ordinary refresh failure. A failed refresh is recoverable and the client falls
+back to acquiring a fresh token; an escalation is not, because falling back would
+obtain a working token by another grant and bury the discrepancy. It propagates.
+
+### The scope on the token is what was granted
+
+`TokenData::$scope` always reports what the provider granted, which may be
+narrower than what `withScope()` asked for — including on the very first request.
+The storage key is built from the **requested** scope, so two callers asking for
+different scopes never share a cache entry regardless of what was granted back.
 
 ---
 
