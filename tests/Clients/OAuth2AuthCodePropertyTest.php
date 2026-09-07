@@ -37,7 +37,7 @@ class CustomParamsAuthCodeOAuth2 extends AuthCodeTestOAuth2
      *
      * @param string $state The CSRF state value.
      * @param string $codeChallenge The PKCE code challenge.
-     * @return array<string, string>
+     * @return array<string, string|null>
      */
     protected function buildAuthorizationParams(string $state, string $codeChallenge): array
     {
@@ -130,9 +130,9 @@ class CustomParseResponseOAuth2 extends AuthCodeTestOAuth2
  * Feature: oauth2-auth-code-flow, Property 12: Subclass exchange params appear in request
  * Feature: oauth2-auth-code-flow, Property 13: Subclass parseTokenResponse override is used
  *
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
- * @SuppressWarnings(PHPMD.ExcessiveClassLength)
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
+ * @SuppressWarnings("PHPMD.ExcessiveClassLength")
  */
 class OAuth2AuthCodePropertyTest extends TestCase
 {

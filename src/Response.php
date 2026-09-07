@@ -13,9 +13,9 @@ use Simsoft\HttpClient\Streams\StringStream;
 /**
  * Response class.
  *
- * @SuppressWarnings(PHPMD.TooManyMethods)
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
- * @SuppressWarnings(PHPMD.ExcessivePublicCount)
+ * @SuppressWarnings("PHPMD.TooManyMethods")
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
+ * @SuppressWarnings("PHPMD.ExcessivePublicCount")
  * The HTTP status helper methods (ok(), notFound(), etc.) are intentional
  * convenience aliases — suppressing these metrics is appropriate here.
  */
@@ -150,11 +150,11 @@ class Response implements ResponseInterface
      */
     private function parseStatusLine(string $line): void
     {
+        // explode() always yields at least one element, so $parts[0] needs no
+        // isset() guard — on an empty line it is simply the empty string.
         $parts = explode(' ', $line, 3);
 
-        if (isset($parts[0])) {
-            $this->protocolVersion = str_replace('HTTP/', '', $parts[0]);
-        }
+        $this->protocolVersion = str_replace('HTTP/', '', $parts[0]);
 
         if (isset($parts[2]) && ($this->message === '' || $this->statusCode > 0)) {
             $this->message = trim($parts[2]);
@@ -265,7 +265,7 @@ class Response implements ResponseInterface
      *
      * @return bool
      *
-     * @SuppressWarnings(PHPMD.ShortMethodName)
+     * @SuppressWarnings("PHPMD.ShortMethodName")
      */
     public function ok(): bool
     {

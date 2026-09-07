@@ -91,7 +91,9 @@ trait OAuth2AuthCodeTrait
      *
      * @param string $state The CSRF state value.
      * @param string $codeChallenge The PKCE code challenge.
-     * @return array<string, string> The authorization query parameters.
+     * @return array<string, string|null> The authorization query parameters. This
+     *     implementation returns no nulls, but an override may, and the caller
+     *     filters them out rather than emitting `param=` in the URL.
      */
     protected function buildAuthorizationParams(string $state, string $codeChallenge): array
     {

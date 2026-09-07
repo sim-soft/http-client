@@ -34,8 +34,8 @@ use Throwable;
  * @phpstan-consistent-constructor make() instantiates the called class, so a
  * subclass must keep the constructor signature it inherits.
  *
- * @SuppressWarnings(PHPMD.TooManyPublicMethods) Trait methods are counted toward the class total.
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects) Coupling is inherent to PSR-18 compliance and trait composition.
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods") Trait methods are counted toward the class total.
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects") Coupling is inherent to PSR-18 compliance and trait composition.
  */
 class HttpClient implements ClientInterface
 {
@@ -84,7 +84,16 @@ class HttpClient implements ClientInterface
     /** @var string The response class to be used. */
     protected string $responseClass = Response::class;
 
-    /** @var array<array-key, Closure(self, Closure): Response> Middleware stack (in reverse order)> */
+    /**
+     * Middleware stack (in reverse order).
+     *
+     * Typed as returning mixed rather than Response because withMiddleware()
+     * accepts a bare Closure from the caller: nothing enforces the return type
+     * until the pipeline checks it at runtime. Promising Response here would
+     * make that check look redundant when it is the only thing performing it.
+     *
+     * @var array<array-key, Closure(self, Closure): mixed>
+     */
     protected array $middleware = [];
 
     /** @var LoggerInterface|null Logger instance. */
@@ -244,7 +253,7 @@ class HttpClient implements ClientInterface
      * @param string $url
      * @return $this
      *
-     * @SuppressWarnings(PHPMD.ShortMethodName)
+     * @SuppressWarnings("PHPMD.ShortMethodName")
      */
     public function to(string $url): self
     {
