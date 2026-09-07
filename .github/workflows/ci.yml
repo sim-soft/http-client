@@ -48,6 +48,80 @@ jobs:
       - name: Run tests
         run: vendor/bin/phpunit --use-baseline baseline.xml tests
 
+  coverage:
+    name: Code coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # PCOV rather than Xdebug: it only records line coverage, which is all
+      # this job gates on, and it does so without Xdebug's slowdown on a suite
+      # that makes real network calls.
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: curl, json, mbstring, pcov
+          coverage: pcov
+
+      - name: Install dependencies
+        uses: ramsey/composer-install@v3
+
+      # Coverage is measured over src only; phpunit.xml already scopes <source>
+      # to that directory, so tests and fixtures do not inflate the figure.
+      - name: Run tests with coverage
+        run: |
+          vendor/bin/phpunit --use-baseline baseline.xml tests \
+            --coverage-clover=coverage.xml \
+            --coverage-text \
+            --only-summary-for-coverage-text \
+            | tee coverage.txt
+
+      # Blocking. The threshold tracks the measured figure rather than an
+      # aspiration: it exists to catch a drop, not to demand an increase.
+      # Raise it when real coverage rises; never lower it to make a red build
+      # green.
+      - name: Check coverage threshold
+        env:
+          MINIMUM: '80'
+        run: |
+          COVERED=$(php -r '$x = simplexml_load_file("coverage.xml"); echo (int) $x->project->metrics["coveredstatements"];')
+          TOTAL=$(php -r '$x = simplexml_load_file("coverage.xml"); echo (int) $x->project->metrics["statements"];')
+
+          if [ "$TOTAL" -eq 0 ]; then
+            echo "::error::No statements were measured — the coverage driver did not load."
+            exit 1
+          fi
+
+          PERCENT=$(php -r "printf('%.2f', $COVERED / $TOTAL * 100);")
+          echo "Line coverage: ${PERCENT}% (${COVERED}/${TOTAL} statements)"
+
+          {
+            echo "### Code coverage"
+            echo ""
+            echo "**${PERCENT}%** of lines — ${COVERED} of ${TOTAL} statements."
+            echo ""
+            echo '```'
+            sed -n '/Code Coverage Report/,$p' coverage.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$(php -r "echo $PERCENT < ${MINIMUM} ? 1 : 0;")" -eq 1 ]; then
+            echo "::error::Line coverage ${PERCENT}% is below the ${MINIMUM}% minimum."
+            exit 1
+          fi
+
+      # Retained so a drop can be diffed against an earlier run rather than
+      # only seen as a threshold failure.
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-clover
+          path: coverage.xml
+          retention-days: 14
+
   static-analysis:
     name: Static analysis
     runs-on: ubuntu-latest
