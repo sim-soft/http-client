@@ -8,7 +8,9 @@ use RuntimeException;
 use Simsoft\HttpClient\Clients\Helpers\FileStorage;
 use Simsoft\HttpClient\Clients\Responses\OAuth2TokenResponse;
 use Simsoft\HttpClient\Clients\Traits\OAuth2AuthCodeTrait;
+use Simsoft\HttpClient\Clients\Traits\OAuth2ScopeTrait;
 use Simsoft\HttpClient\Clients\Traits\OAuth2TokenOperationsTrait;
+use Simsoft\HttpClient\Exceptions\ScopeEscalationException;
 use Simsoft\HttpClient\HttpClient;
 use Simsoft\HttpClient\Interfaces\StorageInterface;
 use Throwable;
@@ -34,6 +36,7 @@ use Throwable;
 abstract class OAuth2
 {
     use OAuth2AuthCodeTrait;
+    use OAuth2ScopeTrait;
     use OAuth2TokenOperationsTrait;
 
     /** @var string TokenData metadata key recording which grant issued the token. */
@@ -518,6 +521,12 @@ abstract class OAuth2
     {
         try {
             return $this->refreshToken($token);
+        } catch (ScopeEscalationException $escalation) {
+            // Not a failed refresh. The provider answered, and answered with
+            // more authority than it granted. Falling back would obtain a
+            // working token by another grant and bury the discrepancy, so this
+            // one propagates.
+            throw $escalation;
         } catch (Throwable $throwable) {
             error_log(sprintf(
                 '[OAuth2] Refresh failed for client "%s": %s — attempting fresh token',
@@ -622,7 +631,7 @@ abstract class OAuth2
 
         $this->assertTokenResponse($response, 'Token refresh');
 
-        $freshToken = $this->toTokenData($response);
+        $freshToken = $this->reconcileRefreshedScope($token, $this->toTokenData($response));
 
         // A refreshed user token is still a user token; carry the marker across
         // so a later expiry is not mistaken for an application token.
