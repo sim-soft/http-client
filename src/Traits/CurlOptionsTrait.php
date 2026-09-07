@@ -1,0 +1,319 @@
+<?php
+
+namespace Simsoft\HttpClient\Traits;
+
+use CurlHandle;
+use InvalidArgumentException;
+use RuntimeException;
+
+/**
+ * CurlOptionsTrait — manages cURL handle lifecycle and option preparation.
+ *
+ * @phpmd:SuppressWarnings(StaticAccess)
+ */
+trait CurlOptionsTrait
+{
+    /** @var CurlHandle|null Reusable cURL handle. */
+    protected ?CurlHandle $curlHandle = null;
+
+    /**
+     * Reset the cURL handle on clone to prevent shared handle corruption.
+     *
+     * @return void
+     */
+    public function __clone(): void
+    {
+        $this->curlHandle = null;
+    }
+
+    /** @var int Buffer size in bytes. Default: 8192. */
+    protected int $bufferSize = 8192;
+
+    /** @var int DNS cache timeout in seconds. Force DNS re-resolution every 60 seconds by default. */
+    protected int $dnsTimeout = 60;
+
+    /** @var int Execution timeout in seconds. */
+    protected int $timeout = 30;
+
+    /** @var int Connection timeout in seconds. */
+    protected int $connectionTimeout = 5;
+
+    /** @var bool Whether to return the transfer as a string. */
+    protected bool $returnTransfer = true;
+
+    /** @var array<int, mixed> Default cURL options. */
+    protected array $options = [
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS => 5,
+    ];
+
+    /**
+     * Set buffer size (In bytes). Default: 8192 bytes.
+     *
+     * PHP default is 16,000 bytes = 16KB
+     * Suggest set 128 thousand bytes = 128KB for large file download
+     *
+     * @param int $size
+     * @return $this
+     */
+    public function withBufferSize(int $size): self
+    {
+        $this->bufferSize = $size;
+        return $this;
+    }
+
+    /**
+     * Set DNS cache timeout in seconds.
+     *
+     * @param int $seconds
+     * @return $this
+     */
+    public function withDNSTimeout(int $seconds): self
+    {
+        $this->dnsTimeout = $seconds;
+        return $this;
+    }
+
+    /**
+     * Set the connection timeout in seconds.
+     *
+     * @param int $timeout Connection timeout in seconds. Default: 0 seconds.
+     * @return $this
+     */
+    public function connectionTimeout(int $timeout): self
+    {
+        if ($timeout < 0) {
+            throw new InvalidArgumentException('Connection timeout must be >= 0');
+        }
+        $this->connectionTimeout = $timeout;
+        return $this;
+    }
+
+    /**
+     * Set the execution timeout in seconds.
+     *
+     * @param int $timeout Timeout in seconds. 0 seconds means no timeout.
+     * @return $this
+     */
+    public function timeout(int $timeout): self
+    {
+        if ($timeout < 0) {
+            throw new InvalidArgumentException('Timeout must be >= 0');
+        }
+        $this->timeout = $timeout;
+        return $this;
+    }
+
+    /**
+     * Enable verbose cURL output.
+     *
+     * @return $this
+     */
+    public function verbose(): self
+    {
+        $this->options[CURLOPT_VERBOSE] = true;
+        return $this;
+    }
+
+    /**
+     * Disable TLS certificate verification.
+     *
+     * @return $this
+     */
+    public function withoutVerifying(): self
+    {
+        $this->options[CURLOPT_SSL_VERIFYPEER] = false;
+        $this->options[CURLOPT_SSL_VERIFYHOST] = 0;
+        return $this;
+    }
+
+    /**
+     * Disable return transfer (output directly).
+     *
+     * @return $this
+     */
+    public function withoutReturnTransfer(): self
+    {
+        $this->returnTransfer = false;
+        return $this;
+    }
+
+    /**
+     * Set arbitrary cURL options.
+     *
+     * The two timeout options are redirected to timeout() and
+     * connectionTimeout(), which own those settings: applyTransferOptions()
+     * writes both properties into the option array on every request, so an
+     * entry stored here would be overwritten and silently ignored. Routing
+     * them keeps the last call authoritative whichever API is used.
+     *
+     * @param array<int, mixed> $options
+     * @return $this
+     * @throws InvalidArgumentException When a timeout option is negative or not an integer.
+     */
+    public function withOptions(array $options): self
+    {
+        foreach ($options as $option => $value) {
+            if ($option === CURLOPT_TIMEOUT) {
+                $this->timeout($this->assertTimeoutValue($value, 'CURLOPT_TIMEOUT'));
+                continue;
+            }
+
+            if ($option === CURLOPT_CONNECTTIMEOUT) {
+                $this->connectionTimeout($this->assertTimeoutValue($value, 'CURLOPT_CONNECTTIMEOUT'));
+                continue;
+            }
+
+            $this->options[$option] = $value;
+        }
+        return $this;
+    }
+
+    /**
+     * Validate a timeout value supplied through withOptions().
+     *
+     * @param mixed $value The value given for the option.
+     * @param string $option The option name, used in the error message.
+     * @return int
+     * @throws InvalidArgumentException When the value is not an integer.
+     */
+    private function assertTimeoutValue(mixed $value, string $option): int
+    {
+        if (!is_int($value)) {
+            throw new InvalidArgumentException("$option must be an integer, " . get_debug_type($value) . ' given');
+        }
+
+        return $value;
+    }
+
+    /**
+     * Initialize or reset the cURL handle.
+     *
+     * @return CurlHandle
+     */
+    protected function initCurlHandle(): CurlHandle
+    {
+        if ($this->curlHandle !== null) {
+            curl_reset($this->curlHandle);
+            return $this->curlHandle;
+        }
+
+        $this->curlHandle = $this->createCurlHandle();
+
+        return $this->curlHandle;
+    }
+
+    /**
+     * Create a standalone cURL handle that is not bound to this instance.
+     *
+     * Sequential requests share one handle to keep the connection alive, but a
+     * handle may only be attached to a curl_multi once. Concurrent execution
+     * therefore needs a handle of its own; adding the shared one twice returns
+     * CURLM_ADDED_ALREADY and the second transfer never runs.
+     *
+     * @return CurlHandle
+     */
+    protected function createCurlHandle(): CurlHandle
+    {
+        $handle = curl_init();
+        if ($handle === false) {
+            throw new RuntimeException('Failed to initialize cURL handle.');
+        }
+
+        return $handle;
+    }
+
+    /**
+     * Apply global cURL settings that never change between requests.
+     *
+     * @param CurlHandle $handle
+     * @return void
+     */
+    protected function applyCurlSettings(CurlHandle $handle): void
+    {
+        curl_setopt($handle, CURLOPT_BUFFERSIZE, $this->bufferSize);
+        curl_setopt($handle, CURLOPT_ENCODING, ''); // Disable automatic encoding. Allow Gzip/Brotli compression
+        curl_setopt($handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0); // Enable HTTP/2 as it allows multiplexing
+        curl_setopt($handle, CURLOPT_DNS_CACHE_TIMEOUT, $this->dnsTimeout);
+
+        $this->applyProtocolRestrictions($handle);
+    }
+
+    /**
+     * Apply protocol restrictions using the appropriate cURL constants.
+     *
+     * Uses the newer _STR variants on PHP 8.3+ to avoid deprecation warnings,
+     * falling back to the legacy integer-based constants on older versions.
+     *
+     * @param CurlHandle $handle
+     * @return void
+     */
+    private function applyProtocolRestrictions(CurlHandle $handle): void
+    {
+        // CURLOPT_PROTOCOLS is deprecated in PHP 8.3+; use CURLOPT_PROTOCOLS_STR when available
+        $protocolsOption = defined('CURLOPT_PROTOCOLS_STR') ? CURLOPT_PROTOCOLS_STR : CURLOPT_PROTOCOLS;
+        $protocolsValue = defined('CURLOPT_PROTOCOLS_STR') ? 'http,https' : (CURLPROTO_HTTP | CURLPROTO_HTTPS);
+        curl_setopt($handle, $protocolsOption, $protocolsValue);
+
+        // CURLOPT_REDIR_PROTOCOLS is deprecated in PHP 8.3+; use CURLOPT_REDIR_PROTOCOLS_STR when available
+        $redirOption = defined('CURLOPT_REDIR_PROTOCOLS_STR') ? CURLOPT_REDIR_PROTOCOLS_STR : CURLOPT_REDIR_PROTOCOLS;
+        $redirValue = defined('CURLOPT_REDIR_PROTOCOLS_STR') ? 'http,https' : (CURLPROTO_HTTP | CURLPROTO_HTTPS);
+        curl_setopt($handle, $redirOption, $redirValue);
+    }
+
+    /**
+     * Apply transfer options (return transfer, timeouts).
+     *
+     * @param CurlHandle $handle
+     * @return void
+     */
+    protected function applyTransferOptions(CurlHandle $handle): void
+    {
+        $this->options[CURLOPT_CONNECTTIMEOUT] = $this->connectionTimeout;
+        $this->options[CURLOPT_TIMEOUT] = $this->timeout;
+        $this->options[CURLOPT_FAILONERROR] = false;
+        $this->options[CURLOPT_NOSIGNAL] = 1;
+
+        if (
+            !isset($this->options[CURLOPT_FILE])
+            && !isset($this->options[CURLOPT_WRITEFUNCTION])
+            && $this->returnTransfer
+        ) {
+            $this->options[CURLOPT_RETURNTRANSFER] = true;
+        }
+
+        curl_setopt_array($handle, $this->options);
+    }
+
+    /**
+     * Clear cURL options that belong to a single request (called by flush).
+     *
+     * Only request-scoped keys are removed. Connection-scoped configuration
+     * set by the caller — TLS verification, redirect policy, and anything
+     * passed to withOptions() — is deliberately preserved so a reused client
+     * keeps the setup it was given. Resetting the whole array here would
+     * silently re-enable TLS verification after withoutVerifying().
+     *
+     * @return void
+     */
+    protected function resetRequestOptions(): void
+    {
+        $this->returnTransfer = true;
+
+        unset(
+            $this->options[CURLOPT_URL],
+            $this->options[CURLOPT_POST],
+            $this->options[CURLOPT_CUSTOMREQUEST],
+            $this->options[CURLOPT_POSTFIELDS],
+            $this->options[CURLOPT_UPLOAD],
+            $this->options[CURLOPT_INFILESIZE],
+            $this->options[CURLOPT_READFUNCTION],
+            $this->options[CURLOPT_RESUME_FROM],
+            $this->options[CURLOPT_FILE],
+            $this->options[CURLOPT_WRITEFUNCTION],
+            $this->options[CURLOPT_RETURNTRANSFER],
+        );
+    }
+}

@@ -1,0 +1,152 @@
+<?php
+
+namespace Simsoft\HttpClient\Traits;
+
+use InvalidArgumentException;
+
+/**
+ * SinkTrait — manages download/sink functionality for HTTP requests.
+ *
+ * Provides methods for file-based and stream-based download modes,
+ * including destination validation and the internal writing handler.
+ */
+trait SinkTrait
+{
+    /** @var mixed|null Download destination. */
+    protected mixed $sink = null; // string|resource|null
+
+    /** @var string|null Download the destination path. */
+    protected ?string $sinkPath = null;
+
+    /** @var bool Determine the client owns the sink. */
+    protected bool $sinkOwned = false;
+
+    /**
+     * Download a file using a file-based mode (CURLOPT_FILE).
+     *
+     * Sets up the sink destination for direct file writing via cURL's
+     * built-in file output mechanism.
+     *
+     * @param mixed $destination A file path (string) or an open resource.
+     * @return $this
+     * @throws InvalidArgumentException If the destination is invalid.
+     */
+    public function sink(mixed $destination): self
+    {
+        unset($this->options[CURLOPT_WRITEFUNCTION], $this->options[CURLOPT_FILE]);
+
+        $this->prepareSinkDestination($destination);
+
+        $this->options[CURLOPT_RETURNTRANSFER] = false;
+        $this->options[CURLOPT_FILE] = $this->sink;
+
+        return $this;
+    }
+
+    /**
+     * Download the file using stream-based mode (CURLOPT_WRITEFUNCTION).
+     *
+     * Sets up the sink destination for chunk-based writing via cURL's
+     * write function callback.
+     *
+     * @param mixed $destination A file path (string) or an open resource.
+     * @return $this
+     * @throws InvalidArgumentException If the destination is invalid.
+     */
+    public function sinkStream(mixed $destination): self
+    {
+        unset($this->options[CURLOPT_WRITEFUNCTION], $this->options[CURLOPT_FILE]);
+
+        $this->prepareSinkDestination($destination);
+
+        $this->options[CURLOPT_RETURNTRANSFER] = false;
+        $this->options[CURLOPT_WRITEFUNCTION] = function ($curlHandle, string $data): int {
+            unset($curlHandle); // required by cURL callback signature
+            $written = fwrite($this->sink, $data);
+            return $written === false ? 0 : $written;
+        };
+
+        return $this;
+    }
+
+    /**
+     * Flush pending sink writes to disk.
+     *
+     * cURL writes to the sink through PHP's buffered stream. curl_exec()
+     * flushes that buffer when the transfer ends, but a transfer driven
+     * through curl_multi_* does not: the bytes sit in the buffer until the
+     * resource is closed. Anything that inspects the file before that point —
+     * or truncates it to start a retry — sees a short or stale file.
+     *
+     * @return void
+     */
+    protected function flushSink(): void
+    {
+        if (!is_resource($this->sink)) {
+            return;
+        }
+
+        fflush($this->sink);
+    }
+
+    /**
+     * Validate and prepare the sink destination.
+     *
+     * Accepts either an open resource or a string file path. If a string path
+     * is provided, the file is opened for writing and ownership is tracked.
+     *
+     * @param mixed $destination A file path (string) or an open resource.
+     * @return void
+     * @throws InvalidArgumentException If the destination cannot be used as a sink.
+     */
+    protected function prepareSinkDestination(mixed $destination): void
+    {
+        if (is_resource($destination)) {
+            $this->releaseOwnedSink();
+
+            $this->sink = $destination;
+            $this->sinkPath = null;
+
+            $meta = stream_get_meta_data($this->sink);
+            if ($meta['seekable']) {
+                rewind($this->sink);
+            }
+
+            return;
+        }
+
+        if (is_string($destination)) {
+            $handle = fopen($destination, 'w');
+            $handle || throw new InvalidArgumentException("Unable to open file: $destination");
+
+            $this->releaseOwnedSink();
+
+            $this->sinkOwned = true;
+            $this->sink = $handle;
+            $this->sinkPath = $destination;
+
+            return;
+        }
+
+        throw new InvalidArgumentException('Sink must be file path or resource');
+    }
+
+    /**
+     * Close the current sink if this client opened it, and drop the ownership flag.
+     *
+     * Ownership is set when a path is given and must not survive the sink it
+     * describes. Left standing, a subsequent sink() taking a caller-supplied
+     * resource would inherit the flag and the client would close a handle it
+     * never opened — while the handle it did open leaked.
+     *
+     * @return void
+     */
+    private function releaseOwnedSink(): void
+    {
+        if ($this->sinkOwned && is_resource($this->sink)) {
+            fclose($this->sink);
+        }
+
+        $this->sinkOwned = false;
+    }
+}
