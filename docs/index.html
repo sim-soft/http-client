@@ -8,7 +8,7 @@
 
     <!-- SEO Meta -->
     <meta name="description"
-          content="Simsoft HttpClient is a fluent, zero-dependency PHP HTTP client built on ext-curl. Features OAuth2, retry with backoff, middleware pipeline, concurrent requests via HttpPool, PSR-7/PSR-18 compliance, and built-in test doubles.">
+          content="Simsoft HttpClient is a fluent PHP HTTP client built on ext-curl. Features OAuth2, retry with backoff, middleware pipeline, concurrent requests via HttpPool, PSR-7/PSR-18 compliance, and built-in test doubles.">
     <meta name="keywords"
           content="PHP HTTP client, cURL PHP, PSR-18, PSR-7, OAuth2 PHP, HTTP pool, concurrent requests PHP, retry PHP, middleware PHP, fluent API, REST client PHP, file upload PHP, streaming download PHP, FakeHttpClient, PHPUnit HTTP mock">
     <meta name="author" content="Simsoft">
@@ -19,7 +19,7 @@
     <meta property="og:type" content="website">
     <meta property="og:title" content="Simsoft HttpClient — Fluent PHP HTTP Client">
     <meta property="og:description"
-          content="A zero-dependency PHP HTTP client with fluent API, OAuth2, retry, middleware, concurrent requests, and built-in test doubles. PSR-7/PSR-18 compliant.">
+          content="A fluent PHP HTTP client with OAuth2, retry, middleware, concurrent requests, and built-in test doubles. PSR-7/PSR-18 compliant.">
     <meta property="og:url" content="https://sim-soft.github.io/http-client/">
     <meta property="og:image" content="https://sim-soft.github.io/http-client/img/simsoft.webp">
     <meta property="og:site_name" content="Simsoft HttpClient Documentation">
@@ -29,7 +29,7 @@
     <meta name="twitter:card" content="summary">
     <meta name="twitter:title" content="Simsoft HttpClient — Fluent PHP HTTP Client">
     <meta name="twitter:description"
-          content="Zero-dependency PHP HTTP client with OAuth2, retry, middleware, concurrent requests, and PSR-7/PSR-18 compliance.">
+          content="Fluent PHP HTTP client with OAuth2, retry, middleware, concurrent requests, and PSR-7/PSR-18 compliance.">
     <meta name="twitter:image" content="https://sim-soft.github.io/http-client/img/simsoft.webp">
 
     <!-- Structured Data (JSON-LD) -->
@@ -38,7 +38,7 @@
             "@context": "https://schema.org",
             "@type": "SoftwareSourceCode",
             "name": "Simsoft HttpClient",
-            "description": "A fluent, zero-dependency PHP HTTP client built on ext-curl with OAuth2, retry, middleware, concurrent requests, and PSR-7/PSR-18 compliance.",
+            "description": "A fluent PHP HTTP client built on ext-curl with OAuth2, retry, middleware, concurrent requests, and PSR-7/PSR-18 compliance.",
             "url": "https://sim-soft.github.io/http-client/",
             "codeRepository": "https://github.com/sim-soft/http-client",
             "programmingLanguage": {
@@ -74,6 +74,35 @@
     <style>
         .logo-text {
             color: inherit !important;
+        }
+
+        /* Version badge under the sidebar title. Hidden until the fetch
+           resolves, so a Packagist outage leaves no empty gap. */
+        .app-version {
+            display: none;
+            margin: -12px 0 18px;
+            text-align: center;
+        }
+
+        .app-version.is-loaded {
+            display: block;
+        }
+
+        .app-version a {
+            /* currentColor, not a fixed grey: the darklight theme swaps the
+               text colour per theme, and a literal light border would glare
+               against the dark background. */
+            border: 1px solid currentColor;
+            border-radius: 3px;
+            color: inherit;
+            font-size: 12px;
+            opacity: 0.55;
+            padding: 1px 8px;
+            text-decoration: none;
+        }
+
+        .app-version a:hover {
+            opacity: 1;
         }
     </style>
 </head>
@@ -125,6 +154,55 @@
         hook.doneEach(function () {
             var title = document.querySelector('.markdown-section h1');
             document.title = 'Simsoft HttpClient' + (title ? ' - ' + title.textContent : '');
+        });
+    });
+
+    // Show the latest released version beneath the sidebar title.
+    //
+    // Read at runtime rather than hard-coded, so the site cannot drift out of
+    // date the way a literal would every time a release is tagged.
+    //
+    // The source is the GitHub releases API, not Packagist: repo.packagist.org
+    // sends no Access-Control-Allow-Origin header, so a browser fetch of it
+    // from this origin is blocked outright. GitHub sends `*`, and it is also
+    // the resource the badge links to, so the number and its destination
+    // cannot disagree.
+    //
+    // The element is only revealed once a version actually comes back. A
+    // failed, rate-limited (60/hr unauthenticated) or blocked request leaves
+    // the sidebar exactly as it was.
+    window.$docsify.plugins = window.$docsify.plugins.concat(function (hook) {
+        hook.mounted(function () {
+            var name = document.querySelector('.sidebar .app-name');
+            if (!name) {
+                return;
+            }
+
+            var el = document.createElement('div');
+            el.className = 'app-version';
+            name.insertAdjacentElement('afterend', el);
+
+            fetch('https://api.github.com/repos/sim-soft/http-client/releases/latest')
+                .then(function (r) {
+                    return r.ok ? r.json() : Promise.reject(r.status);
+                })
+                .then(function (release) {
+                    var tag = release && release.tag_name;
+                    if (!tag || !/^v?\d+\.\d+\.\d+/.test(tag)) {
+                        return;
+                    }
+
+                    var link = document.createElement('a');
+                    link.href = release.html_url;
+                    link.target = '_blank';
+                    link.rel = 'noopener';
+                    link.textContent = 'v' + tag.replace(/^v/, '');
+                    el.appendChild(link);
+                    el.classList.add('is-loaded');
+                })
+                .catch(function () {
+                    /* Offline, rate-limited or blocked: show nothing. */
+                });
         });
     });
 </script>
