@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Simsoft\HttpClient\Tests\Clients;
 
-use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Simsoft\HttpClient\Clients\Helpers\SessionStorage;
@@ -13,8 +12,14 @@ use Simsoft\HttpClient\Clients\Helpers\SessionStorage;
  * SessionStorageTest class
  *
  * Tests for SessionStorage CRUD operations using a simulated $_SESSION superglobal.
+ *
+ * These deliberately do not run in separate processes. The isolation they used
+ * to carry was defensive rather than diagnosed — session_start() touches global
+ * state, so it looked prudent — but the CRUD tests below only read and write
+ * $_SESSION, which setUp() and tearDown() reset around each one. What the
+ * isolation did instead was hang the suite outright under any coverage driver,
+ * because PHPUnit's child processes do not return once one is loaded.
  */
-#[RunTestsInSeparateProcesses]
 class SessionStorageTest extends TestCase
 {
     /** @var string Namespace key for session storage. */
