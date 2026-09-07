@@ -48,6 +48,93 @@ jobs:
       - name: Run tests
         run: vendor/bin/phpunit --use-baseline baseline.xml tests
 
+  coverage:
+    name: Code coverage
+    runs-on: ubuntu-latest
+
+    # The suite runs in about two minutes in every other job. Ten is generous
+    # for the coverage overhead and still bounded — the first attempt at this
+    # job set no timeout, inherited the six-hour default, and held a runner on
+    # every push until it was cancelled by hand.
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # PCOV rather than Xdebug: it only records line coverage, which is all
+      # this job reports, and it does so without Xdebug's slowdown on a suite
+      # that makes real network calls.
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: curl, json, mbstring, pcov
+          coverage: pcov
+
+      - name: Install dependencies
+        uses: ramsey/composer-install@v3
+
+      # Coverage is measured over src only; phpunit.xml already scopes <source>
+      # to that directory, so tests and fixtures do not inflate the figure.
+      #
+      # --coverage-text writes to a file rather than piping stdout through tee.
+      # GitHub's default shell does not set pipefail, so tee's exit status would
+      # win and a failing suite would report this step as green.
+      - name: Run tests with coverage
+        run: |
+          vendor/bin/phpunit --use-baseline baseline.xml tests \
+            --coverage-clover=coverage.xml \
+            --coverage-text=coverage.txt \
+            --only-summary-for-coverage-text
+
+      # Reporting only — deliberately not a gate. Coverage counts lines that
+      # executed, not lines whose behaviour was verified, so a percentage
+      # threshold rewards shallow tests over the ones that are hard to write.
+      # The number is here to be read, and the per-file report below it is the
+      # part worth reading: a file at zero is a fact about the suite, where the
+      # aggregate is mostly noise.
+      #
+      # The step still fails if the driver did not load, since 0/0 statements
+      # would otherwise be reported as a clean 0% rather than as a broken job.
+      - name: Report coverage
+        run: |
+          COVERED=$(php -r '$x = simplexml_load_file("coverage.xml"); echo (int) $x->project->metrics["coveredstatements"];')
+          TOTAL=$(php -r '$x = simplexml_load_file("coverage.xml"); echo (int) $x->project->metrics["statements"];')
+
+          if [ "$TOTAL" -eq 0 ]; then
+            echo "::error::No statements were measured — the coverage driver did not load."
+            exit 1
+          fi
+
+          PERCENT=$(php -r "printf('%.2f', $COVERED / $TOTAL * 100);")
+          echo "Line coverage: ${PERCENT}% (${COVERED}/${TOTAL} statements)"
+
+          {
+            echo "### Code coverage"
+            echo ""
+            echo "**${PERCENT}%** of lines — ${COVERED} of ${TOTAL} statements."
+            echo ""
+            echo '```'
+            # The percentage above comes from the clover file and is always
+            # right. This block is PHPUnit's own text report, which is nicer to
+            # read but whose exact headings depend on the reporter — so fall
+            # back to the whole file rather than emitting an empty block.
+            sed -n '/Code Coverage Report/,$p' coverage.txt | grep -q . \
+              && sed -n '/Code Coverage Report/,$p' coverage.txt \
+              || cat coverage.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Retained so a drop can be diffed against an earlier run rather than
+      # inferred from two summary percentages.
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-clover
+          path: coverage.xml
+          retention-days: 14
+
   static-analysis:
     name: Static analysis
     runs-on: ubuntu-latest
