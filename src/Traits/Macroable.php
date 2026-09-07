@@ -12,7 +12,7 @@ use ReflectionNamedType;
 /**
  * Macroable trait.
  *
- * @SuppressWarnings(PHPMD.StaticAccess)
+ * @SuppressWarnings("PHPMD.StaticAccess")
  * Closure::fromCallable() and Closure::bind() are intentional PHP built-ins,
  * not application-layer static coupling.
  */
@@ -44,7 +44,7 @@ trait Macroable
      * @param bool $replace Whether to replace existing macros with the same name.
      * @return void
      *
-     * @SuppressWarnings(PHPMD.BooleanArgumentFlag)
+     * @SuppressWarnings("PHPMD.BooleanArgumentFlag")
      * The $replace flag controls additive vs. overwrite behavior and is
      * intentional API design — there is no meaningful way to split this
      * into two separate methods without duplicating all the reflection logic.

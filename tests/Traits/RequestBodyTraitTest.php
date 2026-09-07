@@ -17,7 +17,7 @@ use Simsoft\HttpClient\Streams\StringStream;
  * Tests for the RequestBodyTrait methods: withRaw(), withBody(), withBodyStream(),
  * withMultipart(), and stream ownership management.
  *
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
  */
 class RequestBodyTraitTest extends TestCase
 {

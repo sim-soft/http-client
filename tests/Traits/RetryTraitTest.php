@@ -151,7 +151,7 @@ class RetryTraitTest extends TestCase
      *
      * @return void
      *
-     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+     * @SuppressWarnings("PHPMD.UnusedFormalParameter")
      */
     #[Test]
     public function retryWhenCustomCallbackIsUsedByShouldRetry(): void

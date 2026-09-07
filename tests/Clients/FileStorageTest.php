@@ -15,7 +15,7 @@ use Simsoft\HttpClient\Clients\TokenData;
  * Tests for the FileStorage class: CRUD operations, directory creation,
  * SHA-256 key hashing, and allowed_classes restriction on unserialize.
  *
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
  */
 class FileStorageTest extends TestCase
 {

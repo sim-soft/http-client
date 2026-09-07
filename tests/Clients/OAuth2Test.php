@@ -20,7 +20,7 @@ use Simsoft\HttpClient\Interfaces\StorageInterface;
  * Concrete test subclass of OAuth2 with configurable endpoints and
  * overridable buildTokenRequest() for controlled testing without HTTP calls.
  *
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
  */
 class TestOAuth2 extends OAuth2
 {
@@ -112,7 +112,7 @@ class TestOAuth2WithScope extends TestOAuth2
  * Tests for the standalone OAuth2 client: factory method, sandbox switching,
  * endpoint resolution, token lifecycle, refresh logic, and error handling.
  *
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
  */
 class OAuth2Test extends TestCase
 {

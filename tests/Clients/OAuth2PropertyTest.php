@@ -77,7 +77,7 @@ class InMemoryStorage implements StorageInterface
  * Concrete test subclass of OAuth2 for property-based testing.
  * Allows configuring grant type and controlling buildTokenRequest behavior.
  *
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
  */
 class PropertyTestOAuth2 extends OAuth2
 {
@@ -160,7 +160,7 @@ class PropertyTestOAuth2 extends OAuth2
  * Feature: standalone-oauth2, Property 5: Custom grant type propagates to request body
  * Feature: standalone-oauth2, Property 6: Exception safety
  *
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
  */
 class OAuth2PropertyTest extends TestCase
 {

@@ -21,7 +21,7 @@ use Simsoft\HttpClient\Testing\FakeHttpClient;
  * into the next request, while connection-scoped configuration set by the
  * caller (TLS verification, redirect policy, withOptions()) must survive.
  *
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
  */
 class RequestStateLeakTest extends TestCase
 {

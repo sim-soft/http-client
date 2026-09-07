@@ -39,10 +39,10 @@ class HttpClientSubclass extends HttpClient
  * Tests the HttpClient fluent API, URL composition, content types,
  * headers, middleware, retry logic, and response class validation.
  *
- * @SuppressWarnings(PHPMD.TooManyMethods)
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
- * @SuppressWarnings(PHPMD.ExcessivePublicCount)
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @SuppressWarnings("PHPMD.TooManyMethods")
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
+ * @SuppressWarnings("PHPMD.ExcessivePublicCount")
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
  */
 class HttpClientTest extends TestCase
 {

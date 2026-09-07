@@ -22,7 +22,7 @@ use Simsoft\HttpClient\HttpClient;
  *
  * Feature: http-pool-and-testing, Property 7: Handle Reuse Invariant
  *
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
  */
 class ConnectionPoolPropertyTest extends TestCase
 {

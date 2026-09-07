@@ -19,8 +19,8 @@ use SplObjectStorage;
  * HttpClient instances and executes them concurrently with configurable
  * concurrency limits, per-response callbacks, retries, and rate limiting.
  *
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
  */
 class HttpPool
 {
@@ -271,7 +271,7 @@ class HttpPool
      * @throws RuntimeException When curl_multi_init() fails.
      * @throws Exception
      *
-     * @SuppressWarnings(PHPMD.CyclomaticComplexity)
+     * @SuppressWarnings("PHPMD.CyclomaticComplexity")
      */
     public function send(array $requests): HttpPoolResult
     {
@@ -352,7 +352,7 @@ class HttpPool
      * @return HttpPoolResult The pool result with all responses.
      * @throws Exception
      *
-     * @SuppressWarnings(PHPMD.CyclomaticComplexity)
+     * @SuppressWarnings("PHPMD.CyclomaticComplexity")
      */
     private function executeFakeClients(array $clients): HttpPoolResult
     {
@@ -430,9 +430,9 @@ class HttpPool
      *
      * @throws RuntimeException When curl_multi_init() fails.
      *
-     * @SuppressWarnings(PHPMD.CyclomaticComplexity)
-     * @SuppressWarnings(PHPMD.NPathComplexity)
-     * @SuppressWarnings(PHPMD.ExcessiveMethodLength)
+     * @SuppressWarnings("PHPMD.CyclomaticComplexity")
+     * @SuppressWarnings("PHPMD.NPathComplexity")
+     * @SuppressWarnings("PHPMD.ExcessiveMethodLength")
      */
     private function executeWithCurlMulti(array $clients): HttpPoolResult
     {
@@ -565,7 +565,7 @@ class HttpPool
      *
      * @return void
      *
-     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+     * @SuppressWarnings("PHPMD.UnusedFormalParameter")
      */
     private function addHandleToMulti(
         CurlMultiHandle $multiHandle,

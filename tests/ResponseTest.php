@@ -19,11 +19,11 @@ use stdClass;
  * Tests for Response construction, status helpers, JSON decoding,
  * dot-notation data access, PSR-7 header immutability, and stream handling.
  *
- * @SuppressWarnings(PHPMD.TooManyMethods)
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
- * @SuppressWarnings(PHPMD.ExcessivePublicCount)
- * @SuppressWarnings(PHPMD.ExcessiveClassLength)
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @SuppressWarnings("PHPMD.TooManyMethods")
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
+ * @SuppressWarnings("PHPMD.ExcessivePublicCount")
+ * @SuppressWarnings("PHPMD.ExcessiveClassLength")
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
  */
 class ResponseTest extends TestCase
 {
@@ -761,7 +761,7 @@ class ResponseTest extends TestCase
      *
      * Validates: Requirements 3.1, 3.7
      *
-     * @SuppressWarnings(PHPMD.StaticAccess)
+     * @SuppressWarnings("PHPMD.StaticAccess")
      */
     #[Test]
     public function statusCodeMapsToCorrectHelpersProperty(): void

@@ -21,7 +21,7 @@ use Simsoft\HttpClient\Response;
  *
  * Feature: http-pool-and-testing, Property 5: Pool Result Partitioning
  *
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
  */
 class HttpPoolResultPropertyTest extends TestCase
 {

@@ -26,8 +26,8 @@ use Simsoft\HttpClient\Testing\UnexpectedRequestException;
  * Property 10: Fake Response Construction, Property 11: Fake Request Recording,
  * Property 12: Fake Response Sequencing
  *
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
- * @SuppressWarnings(PHPMD.ExcessiveMethodLength)
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
+ * @SuppressWarnings("PHPMD.ExcessiveMethodLength")
  */
 class FakeHttpClientPropertyTest extends TestCase
 {

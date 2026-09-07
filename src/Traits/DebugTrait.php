@@ -19,7 +19,7 @@ trait DebugTrait
      * ensuring the full state (URL, headers, cURL options) is visible.
      * Execution then exits.
      *
-     * @SuppressWarnings(PHPMD.ShortMethodName)
+     * @SuppressWarnings("PHPMD.ShortMethodName")
      *
      * @return static
      */
@@ -46,7 +46,7 @@ trait DebugTrait
     /**
      * Output the current request state as a var_dump and optionally exit.
      *
-     * @SuppressWarnings(PHPMD.ExitExpression)
+     * @SuppressWarnings("PHPMD.ExitExpression")
      *
      * @return void
      */

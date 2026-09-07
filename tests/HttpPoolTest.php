@@ -19,8 +19,8 @@ use Simsoft\HttpClient\Testing\FakeHttpClient;
  * Covers default configuration, input validation, request execution,
  * callback invocation, and HTTP/2 multiplexing configuration.
  *
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
- * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
+ * @SuppressWarnings("PHPMD.CouplingBetweenObjects")
  */
 class HttpPoolTest extends TestCase
 {

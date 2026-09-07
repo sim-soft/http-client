@@ -14,7 +14,7 @@ use Simsoft\HttpClient\Clients\Responses\OAuth2TokenResponse;
  * Tests for the OAuth2TokenResponse class: typed accessors for standard
  * OAuth2 token endpoint fields.
  *
- * @SuppressWarnings(PHPMD.TooManyPublicMethods)
+ * @SuppressWarnings("PHPMD.TooManyPublicMethods")
  */
 class OAuth2TokenResponseTest extends TestCase
 {
