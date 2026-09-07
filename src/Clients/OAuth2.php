@@ -3,6 +3,7 @@
 namespace Simsoft\HttpClient\Clients;
 
 use Closure;
+use InvalidArgumentException;
 use RuntimeException;
 use Simsoft\HttpClient\Clients\Helpers\FileStorage;
 use Simsoft\HttpClient\Clients\Responses\OAuth2TokenResponse;
@@ -141,11 +142,25 @@ abstract class OAuth2
     /**
      * Set the safety buffer subtracted from token expiry time.
      *
+     * The buffer only ever shortens the window a token is considered usable
+     * for. A negative value would invert it into an extension, making the
+     * client treat a token as valid after the provider had already expired it,
+     * so it is rejected here rather than silently applied.
+     *
      * @param int $seconds Buffer in seconds. 0 means no buffer.
      * @return $this
+     * @throws InvalidArgumentException When $seconds is negative.
      */
     public function expiryBuffer(int $seconds): self
     {
+        if ($seconds < 0) {
+            throw new InvalidArgumentException(sprintf(
+                'Expiry buffer must be zero or greater, %d given. '
+                . 'A negative buffer would extend a token past its expiry.',
+                $seconds
+            ));
+        }
+
         $this->expiryBuffer = $seconds;
         return $this;
     }

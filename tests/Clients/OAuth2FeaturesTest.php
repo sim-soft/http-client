@@ -7,6 +7,7 @@ namespace Simsoft\HttpClient\Tests\Clients;
 require_once __DIR__ . '/OAuth2PropertyTest.php';
 
 use Closure;
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -293,6 +294,41 @@ class OAuth2FeaturesTest extends TestCase
         $this->assertNotNull($tokenData);
         $this->assertLessThanOrEqual(time() + 3540, $tokenData->expiresAt);
         $this->assertGreaterThan(time() + 3400, $tokenData->expiresAt);
+    }
+
+    #[Test]
+    public function expiryBufferRejectsNegativeValues(): void
+    {
+        [$client] = $this->createInstance();
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Expiry buffer must be zero or greater');
+
+        $client->expiryBuffer(-1);
+    }
+
+    #[Test]
+    public function expiryBufferLeavesTheBufferUnchangedWhenRejected(): void
+    {
+        [$client] = $this->createInstance();
+
+        try {
+            $client->expiryBuffer(-600);
+        } catch (InvalidArgumentException) {
+            // Expected.
+        }
+
+        $this->assertSame(30, $client->getExpiryBuffer());
+    }
+
+    #[Test]
+    public function expiryBufferAcceptsZero(): void
+    {
+        [$client] = $this->createInstance();
+
+        $client->expiryBuffer(0);
+
+        $this->assertSame(0, $client->getExpiryBuffer());
     }
 
     // ---------------------------------------------------------------

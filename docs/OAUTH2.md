@@ -287,6 +287,10 @@ $token = MyApiOAuth2::request('client-id', 'client-secret')
     ->getAccessToken();
 ```
 
+The buffer must be zero or greater — a negative value would extend a token past
+the expiry the provider reported, so `expiryBuffer()` throws
+`InvalidArgumentException` instead.
+
 When a provider issues a token shorter-lived than the buffer, the buffer is
 capped at that token's lifetime so at least one second of usable window
 remains. Without the cap the token would be cached already expired, and every
