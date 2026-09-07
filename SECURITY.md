@@ -4,11 +4,11 @@
 
 | Version | Supported |
 | ------- | --------- |
-| 2.5.x   | Yes       |
-| 2.0–2.4 | No        |
+| 3.0.x   | Yes       |
+| 2.x     | No        |
 | 1.x     | No        |
 
-Security fixes are released for the latest 2.5.x patch line only. Upgrade to
+Security fixes are released for the latest 3.0.x patch line only. Upgrade to
 the current release before reporting an issue against an older version.
 
 Every release below 2.3.0 is affected by at least one published advisory,
