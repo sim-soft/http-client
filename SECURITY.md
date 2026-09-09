@@ -4,16 +4,24 @@
 
 | Version | Supported |
 | ------- | --------- |
-| 4.0.x   | Yes       |
+| 5.0.x   | Yes       |
 | 3.0.x   | Yes       |
+| 4.0.x   | No        |
 | 2.x     | No        |
 | 1.x     | No        |
 
-Security fixes are released for the latest 4.0.x patch line. 3.0.x is also
-supported, as an exception: 4.0.0 raised the minimum PHP to 8.4, so anyone on
-PHP 8.2 or 8.3 cannot upgrade to it and would otherwise have no supported
-line. 3.0.x will receive security fixes only — no features — for as long as
-PHP 8.3 has upstream security support.
+Security fixes are released for the latest 5.0.x patch line.
+
+**4.0.x is not supported**, despite being newer than 3.0.x. It was superseded
+the same day it shipped, and every 4.0.x user can move to 5.0.0 — the only
+breaking change between them is the removal of an unused `require`, which
+needs at most one `composer require psr/http-factory`. There is no one who can
+run 4.0.x but not 5.0.x, so a separate supported line would protect nobody.
+
+**3.0.x is supported**, as an exception, for the opposite reason: 4.0.0 raised
+the minimum PHP to 8.4, so anyone on PHP 8.2 or 8.3 cannot upgrade past it and
+would otherwise have no supported line at all. 3.0.x receives security fixes
+only — no features — for as long as PHP 8.3 has upstream security support.
 
 Upgrade to the current release before reporting an issue against an older
 version.

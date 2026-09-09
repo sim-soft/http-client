@@ -10,6 +10,13 @@ fact, so they summarise each release rather than list every change.
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-09-09
+
+Released the same day as 4.0.0. The two are separate majors because they
+break different things — 4.0.0 raises the PHP floor, 5.0.0 drops a `require`
+— and collapsing them would have hidden one breaking change behind the
+other. Upgrading straight from 3.0.x to 5.0.0 is fine; read both entries.
+
 ### Removed
 
 - **`psr/http-factory` is no longer required.** The package was never used:
@@ -729,7 +736,8 @@ fact, so they summarise each release rather than list every change.
 
 Initial release.
 
-[Unreleased]: https://github.com/sim-soft/http-client/compare/4.0.0...HEAD
+[Unreleased]: https://github.com/sim-soft/http-client/compare/5.0.0...HEAD
+[5.0.0]: https://github.com/sim-soft/http-client/compare/4.0.0...5.0.0
 [4.0.0]: https://github.com/sim-soft/http-client/compare/3.0.0...4.0.0
 [3.0.0]: https://github.com/sim-soft/http-client/compare/2.5.0...3.0.0
 [2.5.0]: https://github.com/sim-soft/http-client/compare/2.4.1...2.5.0
