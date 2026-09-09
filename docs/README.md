@@ -2,7 +2,7 @@
 
 [![Packagist](https://img.shields.io/packagist/v/simsoft/http-client.svg?label=Packagist)](https://packagist.org/packages/simsoft/http-client)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![PHP Version](https://img.shields.io/badge/PHP-%5E8.2-8892BF.svg)](https://www.php.net/)
+[![PHP Version](https://img.shields.io/badge/PHP-%5E8.4-8892BF.svg)](https://www.php.net/)
 
 ## Introduction
 
@@ -23,7 +23,7 @@ echo $response->data('data.0.name'); // "John Doe"
 
 ## Requirements
 
-- PHP 8.2+
+- PHP 8.4+
 - ext-curl
 
 ## Install
