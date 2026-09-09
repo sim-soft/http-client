@@ -10,6 +10,25 @@ fact, so they summarise each release rather than list every change.
 
 ## [Unreleased]
 
+### Removed
+
+- **`psr/http-factory` is no longer required.** The package was never used:
+  this library implements PSR-18, not PSR-17, so it consumes PSR-7 requests
+  but builds none and referenced no factory interface anywhere in `src/`.
+  Verified by removing it from `vendor/` entirely and running the full suite,
+  which passed unchanged.
+
+  Removing a `require` is breaking in principle — code that relied on this
+  package being installed transitively will no longer get it. In practice the
+  affected case is narrow: PSR-18 users already install a factory package such
+  as `nyholm/psr7` to build requests, and that package depends on
+  `psr/http-factory` itself. If you do use the PSR-17 interfaces directly, add
+  `composer require psr/http-factory` — it is 34 KB of interfaces with no
+  dependencies of its own.
+
+  The dependency tree is now three packages: this library plus
+  `psr/http-message` and `psr/http-client`.
+
 ## [4.0.0] - 2026-09-09
 
 ### Changed
