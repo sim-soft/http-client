@@ -13,7 +13,6 @@
 
 - `psr/http-message` ^1.1|^2.0
 - `psr/http-client` ^1.0
-- `psr/http-factory` ^1
 
 ## Dependencies (Dev)
 

@@ -11,8 +11,8 @@ downloads.
 | Feature                         | **Simsoft HttpClient**                | **Guzzle**                          | **Symfony HttpClient**             | **Laravel HTTP Client** |
 |---------------------------------|---------------------------------------|-------------------------------------|------------------------------------|-------------------------|
 | **PHP requirement**             | 8.4+                                  | 7.4+                                | 8.4.1+                             | 8.3+ (framework)        |
-| **Composer packages pulled**    | 4                                     | 8                                   | 6                                  | 73 (framework)          |
-| **Runtime dependencies**        | `ext-curl` + 3 PSR interface pkgs     | 7 packages incl. promises, psr7     | 5 packages incl. Symfony contracts | Wraps Guzzle            |
+| **Composer packages pulled**    | 3                                     | 8                                   | 6                                  | 73 (framework)          |
+| **Runtime dependencies**        | `ext-curl` + 2 PSR interface pkgs     | 7 packages incl. promises, psr7     | 5 packages incl. Symfony contracts | Wraps Guzzle            |
 | **Architecture**                | Single class + traits, direct cURL    | Handler stack, middleware, promises | Contracts + multiple transports    | Facade over Guzzle      |
 | **PSR-18**                      | ✅                                     | ✅                                   | ✅ (adapter)                        | ❌ (Guzzle underneath)   |
 | **PSR-7**                       | ✅ (response + stream)                 | ✅ (full)                            | ❌ (own contracts)                  | ❌ (own contracts)       |
@@ -29,16 +29,22 @@ downloads.
 | **Built-in test double**        | ✅ FakeHttpClient                      | ✅ MockHandler                       | ✅ MockHttpClient                   | ✅ Http::fake()          |
 | **Connection reuse**            | ✅ shared handle, `curl_reset`         | ✅                                   | ✅                                  | ✅ via Guzzle            |
 | **Standalone**                  | ✅                                     | ✅                                   | ✅                                  | ❌ requires Laravel      |
-| **Installed size (`--no-dev`)** | ~857 KB                               | ~2.3 MB                             | ~1.0 MB                            | ~36 MB (framework)      |
+| **Installed size (`--no-dev`)** | ~823 KB                               | ~2.3 MB                             | ~1.0 MB                            | ~36 MB (framework)      |
 
 ### What the dependency count means
 
-`composer require simsoft/http-client` installs four packages: this library plus
-`psr/http-message`, `psr/http-client` and `psr/http-factory`. Those three contain
-**interfaces only** — no implementation code, no transitive dependencies of their
-own — so nothing is pulled in that could conflict with your stack or need its own
-updates. Beyond `ext-curl` there is no functional dependency, but the `require`
-block is not empty and this documentation does not claim otherwise.
+`composer require simsoft/http-client` installs three packages: this library plus
+`psr/http-message` and `psr/http-client`. Both contain **interfaces only** — no
+implementation code, no transitive dependencies of their own — so nothing is
+pulled in that could conflict with your stack or need its own updates. Beyond
+`ext-curl` there is no functional dependency, but the `require` block is not
+empty and this documentation does not claim otherwise.
+
+`psr/http-factory` is deliberately not required. This library implements PSR-18,
+not PSR-17: it consumes PSR-7 requests but builds none, so it references no
+factory interface. Code that needs to *build* PSR-7 requests installs a factory
+package such as `nyholm/psr7`, which depends on `psr/http-factory` itself — so
+PSR-18 users get it either way, and everyone else no longer carries it.
 
 The comparison that matters is the shape of the tree, not the count. Guzzle's
 eight packages include a promise engine, a PSR-7 implementation, and two Symfony
@@ -50,7 +56,7 @@ and audit.
 
 - **Simpler mental model** — one class, trait composition, no handler stacks or
   DI containers
-- **Interface-only dependency tree** — `ext-curl` plus three PSR packages that
+- **Interface-only dependency tree** — `ext-curl` plus two PSR packages that
   ship no code
 - **OAuth2 without a second library** — client credentials, authorization code,
   and PKCE with transparent token caching and refresh, where the alternatives

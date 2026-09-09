@@ -1086,7 +1086,7 @@ the exception.
 
 | Aspect                | **Simsoft OAuth2**                     | **league/oauth2-client**      | **Laravel Socialite** | **Guzzle + manual** |
 |-----------------------|----------------------------------------|-------------------------------|-----------------------|---------------------|
-| **Packages installed**| 4 (3 are interface-only PSR pkgs)      | 10 (pulls Guzzle)             | Laravel framework     | 8 (Guzzle)          |
+| **Packages installed**| 3 (2 are interface-only PSR pkgs)      | 10 (pulls Guzzle)             | Laravel framework     | 8 (Guzzle)          |
 | **Grant types**       | client_credentials, auth_code, refresh | All (+ password, custom)      | Auth code only        | Manual              |
 | **PKCE (S256)**       | ✅ Built-in                             | ✅ Via provider option         | ❌                     | Manual              |
 | **Token caching**     | ✅ Built-in                             | ❌ You manage it               | Session-based         | ❌                   |
