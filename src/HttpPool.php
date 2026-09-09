@@ -481,8 +481,10 @@ class HttpPool
 
                 $response = $this->buildResponseFromHandle($handle, $index, $headerBuffers, $clients);
 
+                // Removing it from the multi handle and dropping the last
+                // reference is what frees it. curl_close() has been a no-op
+                // since PHP 8.0 and is deprecated in 8.5.
                 curl_multi_remove_handle($multiHandle, $handle);
-                curl_close($handle);
                 $handleToIndex->detach($handle);
                 $activeCount--;
 

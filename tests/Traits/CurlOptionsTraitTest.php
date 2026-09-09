@@ -254,8 +254,6 @@ class CurlOptionsTraitTest extends TestCase
 
         $this->assertSame(7, $options[CURLOPT_TIMEOUT]);
         $this->assertSame(3, $options[CURLOPT_CONNECTTIMEOUT]);
-
-        curl_close($handle);
     }
 
     /**
