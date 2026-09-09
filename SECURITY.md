@@ -4,12 +4,19 @@
 
 | Version | Supported |
 | ------- | --------- |
+| 4.0.x   | Yes       |
 | 3.0.x   | Yes       |
 | 2.x     | No        |
 | 1.x     | No        |
 
-Security fixes are released for the latest 3.0.x patch line only. Upgrade to
-the current release before reporting an issue against an older version.
+Security fixes are released for the latest 4.0.x patch line. 3.0.x is also
+supported, as an exception: 4.0.0 raised the minimum PHP to 8.4, so anyone on
+PHP 8.2 or 8.3 cannot upgrade to it and would otherwise have no supported
+line. 3.0.x will receive security fixes only — no features — for as long as
+PHP 8.3 has upstream security support.
+
+Upgrade to the current release before reporting an issue against an older
+version.
 
 Every release below 2.3.0 is affected by at least one published advisory,
 including header injection and OAuth2 token disclosure between users on a
