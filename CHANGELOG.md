@@ -10,6 +10,8 @@ fact, so they summarise each release rather than list every change.
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-09-09
+
 ### Changed
 
 - **Minimum PHP raised from 8.2 to 8.4.** This is a breaking change for anyone
@@ -708,7 +710,8 @@ fact, so they summarise each release rather than list every change.
 
 Initial release.
 
-[Unreleased]: https://github.com/sim-soft/http-client/compare/3.0.0...HEAD
+[Unreleased]: https://github.com/sim-soft/http-client/compare/4.0.0...HEAD
+[4.0.0]: https://github.com/sim-soft/http-client/compare/3.0.0...4.0.0
 [3.0.0]: https://github.com/sim-soft/http-client/compare/2.5.0...3.0.0
 [2.5.0]: https://github.com/sim-soft/http-client/compare/2.4.1...2.5.0
 [2.4.1]: https://github.com/sim-soft/http-client/compare/2.4.0...2.4.1
