@@ -10,6 +10,29 @@ fact, so they summarise each release rather than list every change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Minimum PHP raised from 8.2 to 8.4.** This is a breaking change for anyone
+  running 8.2 or 8.3; stay on 3.0.x there. PHP 8.2 reaches end of security
+  support in December 2026, and dropping the two older minors lets the library
+  target the language versions it is actually tested against.
+
+- **CI matrix is now 8.4 and 8.5.** The previous matrix claimed in a comment to
+  exercise "every supported minor" but stopped at 8.4 while `composer.json`
+  declared `^8.2`, so 8.5 was permitted and never tested. The matrix now
+  matches the declared constraint. The lowest-dependency job, the coverage
+  job, and the three quality jobs all move to 8.4 with the floor.
+
+### Removed
+
+- **`curl_close()` calls.** The function has been a no-op since PHP 8.0, when
+  cURL handles became `CurlHandle` objects rather than resources, and it is
+  deprecated as of 8.5 — so on every version this library now supports the
+  calls did nothing, and on 8.5 they would emit a deprecation notice. Freeing
+  is done by dropping the reference (`HttpClient::__destruct()`) and by
+  `curl_multi_remove_handle()` (`HttpPool`), both of which are unchanged. No
+  behavioural difference on any supported version.
+
 ## [3.0.0] - 2026-09-08
 
 ### Removed

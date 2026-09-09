@@ -1009,10 +1009,10 @@ class HttpClient implements ClientInterface
      */
     public function __destruct()
     {
-        if ($this->curlHandle instanceof CurlHandle) {
-            curl_close($this->curlHandle);
-            $this->curlHandle = null;
-        }
+        // Dropping the reference is what frees the handle. curl_close() has
+        // been a no-op since PHP 8.0, when cURL moved from resources to
+        // CurlHandle objects, and is deprecated in 8.5.
+        $this->curlHandle = null;
 
         if ($this->postFields instanceof StreamInterface && $this->postFieldsOwned) {
             $this->postFields->close();

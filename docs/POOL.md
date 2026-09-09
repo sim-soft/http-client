@@ -514,8 +514,8 @@ transparently with the existing API.
 1. On the first request, `curl_init()` creates a new handle
 2. On later requests, `curl_reset()` clears the handle's options while
    preserving the underlying connection
-3. When the HttpClient instance is destroyed, the handle is closed via
-   `curl_close()`
+3. When the HttpClient instance is destroyed, the handle reference is dropped
+   and PHP frees it
 
 This gives you connection reuse benefits (keep-alive, session caching) without
 any code changes.

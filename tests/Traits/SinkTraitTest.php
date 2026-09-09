@@ -248,7 +248,6 @@ class SinkTraitTest extends TestCase
 
             $curlHandle = curl_init();
             $bytesWritten = $writeFunction($curlHandle, 'hello world');
-            curl_close($curlHandle);
 
             $this->assertSame(11, $bytesWritten);
 

@@ -2,7 +2,7 @@
 
 ## Language & Runtime
 
-- PHP ^8.1 (must be compatible with 8.1, 8.2, 8.3, 8.4)
+- PHP ^8.4 (must be compatible with 8.4, 8.5)
 - ext-curl (required)
 
 ## Package Manager
@@ -19,7 +19,7 @@
 
 - `phpunit/phpunit` ^11 — Unit testing
 - `phpmd/phpmd` ^2 — Mess detector (code quality rules)
-- `phpstan/phpstan` ^1 — Static analysis (level 8)
+- `phpstan/phpstan` ^2 — Static analysis (level 8)
 - `squizlabs/php_codesniffer` ^4 — Code style checking
 - `steos/quickcheck` ^2.0 — Property-based testing
 
