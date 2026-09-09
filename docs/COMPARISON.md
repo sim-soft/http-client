@@ -1,7 +1,7 @@
 # Comparison with Other Libraries
 
 Measured on 2026-09-09 against the current stable release of each library:
-Simsoft HttpClient 4.0.0, Guzzle 8.2.0, Symfony HttpClient 8.1.6, and Laravel
+Simsoft HttpClient 5.0.0, Guzzle 8.2.0, Symfony HttpClient 8.1.6, and Laravel
 13.31.0. Package counts and sizes come from a real `composer require` with
 `--update-no-dev` into an empty project, so they are what a consumer actually
 downloads.
