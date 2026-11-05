@@ -39,6 +39,7 @@ src/
     ├── Macroable.php
     ├── PrepareHandleTrait.php
     ├── RequestBodyTrait.php
+    ├── RequestInspectionTrait.php
     ├── RetryTrait.php
     ├── Sandbox.php
     └── SinkTrait.php

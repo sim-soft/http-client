@@ -24,6 +24,7 @@ use Simsoft\HttpClient\Traits\DeprecatedTrait;
 use Simsoft\HttpClient\Traits\Macroable;
 use Simsoft\HttpClient\Traits\PrepareHandleTrait;
 use Simsoft\HttpClient\Traits\RequestBodyTrait;
+use Simsoft\HttpClient\Traits\RequestInspectionTrait;
 use Simsoft\HttpClient\Traits\RetryTrait;
 use Simsoft\HttpClient\Traits\SinkTrait;
 use Throwable;
@@ -46,6 +47,7 @@ class HttpClient implements ClientInterface
     use PrepareHandleTrait;
     use RetryTrait;
     use RequestBodyTrait;
+    use RequestInspectionTrait;
     use AttachmentTrait;
     use SinkTrait;
 
@@ -318,6 +320,7 @@ class HttpClient implements ClientInterface
         return $this;
     }
 
+
     /**
      * Assert that a header name is a legal RFC 7230 token.
      *
@@ -478,6 +481,7 @@ class HttpClient implements ClientInterface
         $this->queryParams = array_merge($this->queryParams, $params);
         return $this;
     }
+
 
     /**
      * Perform GET request.

@@ -7,6 +7,7 @@
     - [Sending Requests](/?id=sending-requests)
     - [Request Bodies](/?id=request-bodies)
     - [Headers](/?id=headers)
+  - [Inspecting the Request](/?id=inspecting-the-request)
     - [Authentication](/?id=authentication)
     - [Timeouts & cURL Options](/?id=timeouts-amp-curl-options)
 

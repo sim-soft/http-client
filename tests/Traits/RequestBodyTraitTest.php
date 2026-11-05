@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Simsoft\HttpClient\Tests\Traits;
 
+use CURLFile;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\StreamInterface;
@@ -234,5 +235,128 @@ class RequestBodyTraitTest extends TestCase
             ->withMultipart(['second' => 'value']);
 
         $this->assertSame('multipart', $this->getProperty($client, 'contentType'));
+    }
+
+    /**
+     * Test getRequestBody() returns null when no body is set.
+     *
+     * @return void
+     */
+    #[Test]
+    public function getRequestBodyIsNullByDefault(): void
+    {
+        $this->assertNull(HttpClient::make()->getRequestBody());
+    }
+
+    /**
+     * Test getRequestBody() returns the encoded JSON string.
+     *
+     * @return void
+     */
+    #[Test]
+    public function getRequestBodyReturnsJsonString(): void
+    {
+        $client = HttpClient::make()->withJson(['name' => 'Alice', 'tags' => ['a']]);
+
+        $this->assertSame('{"name":"Alice","tags":["a"]}', $client->getRequestBody());
+    }
+
+    /**
+     * Test getRequestBody() returns the URL-encoded form string.
+     *
+     * @return void
+     */
+    #[Test]
+    public function getRequestBodyReturnsFormString(): void
+    {
+        $client = HttpClient::make()->withForm(['email' => 'a@b.com', 'remember' => '1']);
+
+        $this->assertSame('email=a%40b.com&remember=1', $client->getRequestBody());
+    }
+
+    /**
+     * Test getRequestBody() returns the raw string.
+     *
+     * @return void
+     */
+    #[Test]
+    public function getRequestBodyReturnsRawString(): void
+    {
+        $this->assertSame('<a/>', HttpClient::make()->withRaw('<a/>', 'application/xml')->getRequestBody());
+    }
+
+    /**
+     * Test getRequestBody() returns the GraphQL payload.
+     *
+     * @return void
+     */
+    #[Test]
+    public function getRequestBodyReturnsGraphQlPayload(): void
+    {
+        $client = HttpClient::make()->withGraphQL('query { users }', ['limit' => 5]);
+
+        $this->assertSame('{"query":"query { users }","variables":{"limit":5}}', $client->getRequestBody());
+    }
+
+    /**
+     * Test getRequestBody() returns merged multipart data as an array.
+     *
+     * @return void
+     */
+    #[Test]
+    public function getRequestBodyReturnsMultipartArray(): void
+    {
+        $client = HttpClient::make()
+            ->withMultipart(['name' => 'Alice'])
+            ->withMultipart(['age' => '30']);
+
+        $this->assertSame(['name' => 'Alice', 'age' => '30'], $client->getRequestBody());
+    }
+
+    /**
+     * Test getRequestBody() exposes attachments as CURLFile entries.
+     *
+     * @return void
+     */
+    #[Test]
+    public function getRequestBodyIncludesAttachments(): void
+    {
+        $client = HttpClient::make()
+            ->withMultipart(['title' => 'Report'])
+            ->attach('file', 'file contents', 'report.txt');
+
+        $body = $client->getRequestBody();
+
+        $this->assertIsArray($body);
+        $this->assertSame('Report', $body['title']);
+        $this->assertInstanceOf(CURLFile::class, $body['file']);
+        $this->assertSame('report.txt', $body['file']->getPostFilename());
+    }
+
+    /**
+     * Test getRequestBody() returns the same stream instance that was set.
+     *
+     * @return void
+     */
+    #[Test]
+    public function getRequestBodyReturnsSameStream(): void
+    {
+        $stream = new StringStream('payload');
+
+        $this->assertSame($stream, HttpClient::make()->withBody($stream)->getRequestBody());
+        $this->assertSame($stream, HttpClient::make()->withBodyStream($stream)->getRequestBody());
+    }
+
+    /**
+     * Test the last body set wins.
+     *
+     * @return void
+     */
+    #[Test]
+    public function getRequestBodyReturnsLastBodySet(): void
+    {
+        $client = HttpClient::make()->withJson(['a' => 1])->withRaw('final');
+
+        $this->assertSame('final', $client->getRequestBody());
     }
 }

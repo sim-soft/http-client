@@ -46,6 +46,7 @@ composer require simsoft/http-client
 ### Configuration
 
 - [Headers](#headers)
+- [Inspecting the Request](#inspecting-the-request)
 - [Timeouts & cURL Options](#timeouts-curl-options)
 - [Authentication](#authentication)
 
@@ -163,6 +164,53 @@ $response = HttpClient::make()
 Header names must be valid RFC 7230 tokens, and values may not contain line
 breaks or NUL bytes. Both throw `InvalidArgumentException`, so a user-supplied
 value forwarded into a header cannot forge additional headers on the wire.
+
+## Inspecting the Request
+
+Read the pending request before it is sent, typically from
+[middleware](MIDDLEWARE):
+
+```php
+use Closure;
+use Simsoft\HttpClient\HttpClient;
+use Simsoft\HttpClient\Response;
+
+$response = HttpClient::make()
+    ->withBaseUrl('https://api.example.com')
+    ->withBearerToken('secret-token')
+    ->withHeader('X-Trace-Id', 'abc123')
+    ->withQuery(['page' => 2])
+    ->withJson(['name' => 'Alice'])
+    ->withMiddleware(function (HttpClient $request, Closure $next): Response {
+        $request->getMethod();         // 'POST'
+        $request->getEndpoint();       // 'https://api.example.com/users'
+        $request->getQueryParams();    // ['page' => 2]
+        $request->getRequestHeaders(); // ['x-trace-id' => ['abc123'],
+                                       //  'authorization' => ['Bearer secret-token'],
+                                       //  'content-type' => ['application/json']]
+        $request->getRequestBody();    // '{"name":"Alice"}'
+
+        return $next();
+    })
+    ->post('/users');
+```
+
+| Method                | Returns                                                                                                                    |
+|-----------------------|----------------------------------------------------------------------------------------------------------------------------|
+| `getMethod()`         | HTTP method                                                                                                                |
+| `getEndpoint()`       | Base URL joined with the resource path, without `withQuery()` params                                                       |
+| `getQueryParams()`    | Params from `withQuery()` or `get($uri, $data)`                                                                            |
+| `getRequestHeaders()` | Per-request and bearer-token headers plus `Content-Type`, keyed by lower-case name. Per-request values win on a name clash |
+| `getRequestBody()`    | `string` for JSON/form/raw, `array` for multipart (may contain `CURLFile`), `StreamInterface`, or `null`                   |
+
+- `getRequestHeaders()` leaves out `X-Request-Id`, the default `User-Agent` and
+  `Content-Length`; they are added at send time.
+- With `attach()` files, `Content-Type` is left out so cURL can set the
+  multipart boundary.
+- `getRequestHeaders()` includes `Authorization`. Redact it before logging.
+- Reading a non-seekable stream body consumes it, and the request is then sent
+  with an empty body. Check `isSeekable()` first.
+- All values reset after each request, except the bearer token.
 
 ## Timeouts & cURL Options<a id="timeouts-curl-options"></a>
 
@@ -483,6 +531,9 @@ $response = HttpClient::make()
 
 Logs method, URL, status, duration, and errno for every request. Errors are
 logged at `error` level automatically.
+
+To also log request headers, query params, body and the response body, use a
+logging middleware: see Example 3 in [Middleware](MIDDLEWARE).
 
 ## Debugging
 
