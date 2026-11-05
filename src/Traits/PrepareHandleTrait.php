@@ -110,22 +110,37 @@ trait PrepareHandleTrait
             return;
         }
 
-        // Per-request headers win over connection-scoped ones of the same name.
-        $headers = array_change_key_case($this->headers)
-            + array_change_key_case($this->persistentHeaders);
-
+        $headers = $this->collectHeaders();
         $headers['x-request-id'] ??= [$requestId];
         $headers['user-agent'] ??= [$this->userAgent];
 
+        $this->formattedHeaders = $this->buildFormattedHeaders($headers);
+    }
+
+    /**
+     * Merge per-request and connection-scoped headers and resolve the content type.
+     *
+     * Per-request headers win over connection-scoped ones of the same name.
+     * With attachments present, Content-Type is dropped so cURL can set the
+     * multipart boundary itself.
+     *
+     * @return array<string, mixed> Headers keyed by lower-case name.
+     */
+    private function collectHeaders(): array
+    {
+        $headers = array_change_key_case($this->headers)
+            + array_change_key_case($this->persistentHeaders);
+
         if ($this->hasAttachments) {
             unset($headers['content-type']);
+            return $headers;
         }
 
-        if (!$this->hasAttachments && $this->contentType && !isset($headers['content-type'])) {
+        if ($this->contentType && !isset($headers['content-type'])) {
             $headers['content-type'] = [$this->resolveContentTypeHeader()];
         }
 
-        $this->formattedHeaders = $this->buildFormattedHeaders($headers);
+        return $headers;
     }
 
     /**

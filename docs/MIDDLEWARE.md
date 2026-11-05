@@ -77,25 +77,71 @@ $response = $client->post('/orders', ['item' => 'book']);
 
 #### Example 3: Logging — log every request and response with timing.
 
+Request state can be read inside middleware with these getters:
+
+| Method                | Returns                                                                                                                                                                                    |
+|-----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `getMethod()`         | HTTP method, e.g. `POST`                                                                                                                                                                   |
+| `getEndpoint()`       | Base URL joined with the resource path (no query params from `withQuery()`)                                                                                                                |
+| `getQueryParams()`    | Params set by `withQuery()` or `get($uri, $data)`                                                                                                                                          |
+| `getRequestHeaders()` | Per-request + connection-scoped headers (incl. `Authorization`) and the resolved `Content-Type`, keyed by lower-case name. Excludes `X-Request-Id`, default `User-Agent`, `Content-Length` |
+| `getRequestBody()`    | `string` (JSON/form/raw), `array` (multipart, may hold `CURLFile`), `StreamInterface`, or `null`                                                                                           |
+
 ```php
+use CURLFile;
+use Psr\Http\Message\StreamInterface;
+
 $logger = new Monolog\Logger('http');
 
 $client = HttpClient::make()
     ->withBaseUrl('https://api.example.com')
     ->withMiddleware(function (HttpClient $request, Closure $next) use ($logger): Response {
-        $start = microtime(true);
+        // Capture request state before $next(): inner middleware may change it.
+        $headers = $request->getRequestHeaders();
+        if (isset($headers['authorization'])) {
+            $headers['authorization'] = ['[REDACTED]'];
+        }
 
+        $body = $request->getRequestBody();
+        $loggedBody = match (true) {
+            $body instanceof StreamInterface => '[stream, ' . ($body->getSize() ?? '?') . ' bytes]',
+            is_array($body) => array_map(
+                fn(mixed $value): mixed => $value instanceof CURLFile ? '[file] ' . $value->getPostFilename() : $value,
+                $body
+            ),
+            default => $body,
+        };
+
+        $context = [
+            'method'  => $request->getMethod(),
+            'url'     => $request->getEndpoint(),
+            'query'   => $request->getQueryParams(),
+            'headers' => $headers,
+            'body'    => $loggedBody,
+        ];
+
+        $start = microtime(true);
         $response = $next();
 
-        $logger->info('HTTP request completed', [
-            'status'   => $response->getStatusCode(),
-            'duration' => round((microtime(true) - $start) * 1000, 2) . 'ms',
-            'errno'    => $response->getErrno(),
+        $logger->info('HTTP request completed', $context + [
+            'status'           => $response->getStatusCode(),
+            'reason'           => $response->getReasonPhrase(),
+            'errno'            => $response->getErrno(),
+            'duration'         => round((microtime(true) - $start) * 1000, 2) . 'ms',
+            'response_headers' => $response->getHeaders(),
+            'response_body'    => $response->body(),
         ]);
 
         return $response;
     }, 'logging');
 ```
+
+> **Notes:**
+> - Read stream bodies only if `isSeekable()` is true; the client rewinds
+    seekable streams before sending, but a non-seekable stream read in
+    middleware is sent empty.
+> - `getRequestHeaders()` and response bodies can contain credentials or
+    personal data. Redact before logging.
 
 #### Example 4: Caching — return cached response, skip real request.
 

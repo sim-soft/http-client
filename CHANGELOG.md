@@ -10,6 +10,12 @@ fact, so they summarise each release rather than list every change.
 
 ## [Unreleased]
 
+### Added
+
+- `HttpClient::getRequestHeaders()`, `getQueryParams()` and `getRequestBody()`
+  read the pending request's headers, query params and body, so middleware
+  can log or inspect them. See [Middleware Example 3](docs/MIDDLEWARE.md).
+
 ## [5.0.0] - 2026-09-09
 
 Released the same day as 4.0.0. The two are separate majors because they

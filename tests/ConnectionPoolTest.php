@@ -133,9 +133,11 @@ class ConnectionPoolTest extends TestCase
             ->resource('/users');
 
         $multiHandle = curl_multi_init();
+        $firstHandle = $client->buildHandle();
+        $secondHandle = $client->buildHandle();
 
-        $this->assertSame(CURLM_OK, curl_multi_add_handle($multiHandle, $client->buildHandle()));
-        $this->assertSame(CURLM_OK, curl_multi_add_handle($multiHandle, $client->buildHandle()));
+        $this->assertSame(CURLM_OK, curl_multi_add_handle($multiHandle, $firstHandle));
+        $this->assertSame(CURLM_OK, curl_multi_add_handle($multiHandle, $secondHandle));
 
         curl_multi_close($multiHandle);
     }
@@ -211,6 +213,9 @@ class ConnectionPoolTest extends TestCase
             'getEndpoint',
             'getMethod',
             'getPoolSinkPath',
+            'getQueryParams',
+            'getRequestBody',
+            'getRequestHeaders',
             'graphQL',
             'json',
             'macro',

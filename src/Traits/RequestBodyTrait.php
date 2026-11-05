@@ -23,6 +23,24 @@ trait RequestBodyTrait
     protected ?string $contentType = null;
 
     /**
+     * Get the body configured for the pending request.
+     *
+     * The value is returned as set: a string for JSON, form and raw bodies, an
+     * array for multipart data (which may contain CURLFile attachments), a
+     * StreamInterface for stream bodies, or null when no body is set.
+     *
+     * Reading a stream body moves its pointer. The client rewinds seekable
+     * streams before sending, but a non-seekable stream that is read here
+     * will be sent empty.
+     *
+     * @return string|array<array-key, mixed>|StreamInterface|null
+     */
+    public function getRequestBody(): string|array|StreamInterface|null
+    {
+        return $this->postFields;
+    }
+
+    /**
      * Prepare form-data request params.
      *
      * Auto-set Content-Type: multipart/form-data
